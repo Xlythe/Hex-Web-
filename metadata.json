@@ -1,0 +1,7 @@
+{
+  "name": "Hex Board Game",
+  "description": "A two-player connection game, Hex, where players alternate turns to connect their sides of the board. Implemented with React and Tailwind CSS. Supports Human vs Human, Human vs AI, and placeholder Human vs Online modes.",
+  "requestFramePermissions": [],
+  "prompt": "",
+  "majorCapabilities": []
+}
