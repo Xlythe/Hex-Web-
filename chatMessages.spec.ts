@@ -5,6 +5,7 @@ import {
   MAX_CHAT_HISTORY,
   normalizeChatText,
   reconcileChatEvent,
+  systemChatMessageId,
 } from './chatMessages';
 import type { ChatMessage, IgGameEvent } from './types';
 
@@ -30,6 +31,11 @@ const event = (overrides: Partial<IgGameEvent> = {}): IgGameEvent => ({
 });
 
 describe('chat message state', () => {
+  it('gives same-second system messages stable unique IDs', () => {
+    expect(systemChatMessageId(100, 0)).toBe('system-100-0');
+    expect(systemChatMessageId(100, 1)).toBe('system-100-1');
+  });
+
   it('reconciles an optimistic row without duplicating it', () => {
     const result = reconcileChatEvent([optimistic()], event(), 'Alice', '7');
 

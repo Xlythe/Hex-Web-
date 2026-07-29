@@ -3,6 +3,11 @@ import type { ChatMessage, IgGameEvent } from './types';
 export const MAX_CHAT_MESSAGE_LENGTH = 200;
 export const MAX_CHAT_HISTORY = 100;
 
+export const systemChatMessageId = (
+  timestampSeconds: number,
+  sequence: number,
+): string => `system-${timestampSeconds}-${sequence}`;
+
 export const normalizeChatText = (text: string): string =>
   text.trim().slice(0, MAX_CHAT_MESSAGE_LENGTH);
 

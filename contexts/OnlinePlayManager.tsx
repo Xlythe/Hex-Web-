@@ -65,6 +65,7 @@ import {
   markChatDelivery,
   normalizeChatText,
   reconcileChatEvent,
+  systemChatMessageId,
 } from '../chatMessages';
 import { publicLobbySessions } from '../server/lobbyVisibility';
 
@@ -128,6 +129,7 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
   const _handleRematchEventCallbackRef = useRef<((event: IgGameEvent) => void) | null>(null);
   const pollInFlightRef = useRef(false);
   const lastPollStartedAtRef = useRef(0);
+  const nextSystemMessageSequenceRef = useRef(0);
 
   const showNotification = useCallback((title: string, body: string, tag?: string, isOpponentAction: boolean = true) => {
     if (
@@ -201,7 +203,10 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
   const addSystemChatMessage = useCallback((text: string, timestamp?: number) => {
     const nowSeconds = timestamp || Math.floor(Date.now() / 1000);
     const systemMessage: ChatMessage = {
-      id: `system-${nowSeconds}-${Math.random().toString(36).substring(2, 9)}`,
+      id: systemChatMessageId(
+        nowSeconds,
+        nextSystemMessageSequenceRef.current++,
+      ),
       senderUid: SYSTEM_SENDER_UID,
       senderName: SYSTEM_SENDER_NAME,
       text: text, // Use the passed text directly without prepending "System:"
