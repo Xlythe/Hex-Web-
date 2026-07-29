@@ -17,6 +17,17 @@ interface ChatWindowProps {
   playMessageChimeSound: () => void; // Function to play the message chime
 }
 
+export const countUnreadChatMessages = (
+  messages: ChatMessage[],
+  lastReadMessageCount: number,
+): number => messages
+  .slice(Math.min(lastReadMessageCount, messages.length))
+  .filter(message =>
+    !message.isLocalPlayer
+    && message.senderUid !== SYSTEM_SENDER_UID
+    && message.status !== 'sending'
+  ).length;
+
 const ChatWindow: React.FC<ChatWindowProps> = ({
   messages,
   onSendMessage,
@@ -31,8 +42,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const prevMessagesLengthRef = useRef(messages.length);
-  const [lastReadMessageTimestamp, setLastReadMessageTimestamp] = useState<number>(0);
-  const [hasUnread, setHasUnread] = useState(false);
+  const [lastReadMessageCount, setLastReadMessageCount] = useState(0);
+  const unreadCount = isMaximized
+    ? 0
+    : countUnreadChatMessages(messages, lastReadMessageCount);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -41,15 +54,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   useEffect(() => {
     if (isMaximized) {
       scrollToBottom();
-      if (messages.length > 0) {
-        setLastReadMessageTimestamp(messages[messages.length - 1].initialTimestamp);
-      }
-      setHasUnread(false); // Mark as read when chat is opened
+      setLastReadMessageCount(messages.length);
       if (inputRef.current) {
         inputRef.current.focus();
       }
     }
-  }, [isMaximized, messages]); // Dependency on messages ensures timestamp updates if new messages arrive while open
+  }, [isMaximized, messages]);
 
   useEffect(() => {
     if (messages.length > prevMessagesLengthRef.current) {
@@ -58,23 +68,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         if (soundEffectsEnabled) {
           playMessageChimeSound();
         }
-        if (!isMaximized) { // Only set unread if chat is not currently open
-          setHasUnread(true);
-        }
       }
+    }
+    if (messages.length < prevMessagesLengthRef.current) {
+      setLastReadMessageCount(0);
     }
     prevMessagesLengthRef.current = messages.length;
   }, [messages, soundEffectsEnabled, playMessageChimeSound, isMaximized]);
-
-  // Update `hasUnread` specifically if messages arrive while minimized
-  useEffect(() => {
-    if (!isMaximized && messages.length > 0) {
-      const latestMessage = messages[messages.length - 1];
-      if (latestMessage.initialTimestamp > lastReadMessageTimestamp && !latestMessage.isLocalPlayer && latestMessage.senderUid !== SYSTEM_SENDER_UID) {
-        setHasUnread(true);
-      }
-    }
-  }, [messages, isMaximized, lastReadMessageTimestamp]);
 
 
   const handleSendMessage = async (e: FormEvent<HTMLFormElement>) => {
@@ -118,24 +118,20 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       <button
         onClick={() => {
           onToggleMaximized();
-          if (messages.length > 0) { // Mark as read on open
-            const latestMessage = messages[messages.length - 1];
-            if (latestMessage.senderUid !== SYSTEM_SENDER_UID) {
-                setLastReadMessageTimestamp(latestMessage.initialTimestamp);
-            }
-          }
-          setHasUnread(false);
+          setLastReadMessageCount(messages.length);
         }}
         className={`fixed bottom-4 right-4 ${iconButtonClasses} bg-theme-card-bg-light dark:bg-theme-card-bg-dark shadow-lg z-50`}
         aria-label="Open Chat"
         title="Open Chat"
       >
         <ChatBubbleIcon className="w-6 h-6" />
-        {hasUnread && (
-            <span className="absolute -top-1 -right-1 flex h-3 w-3 pointer-events-none">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-            </span>
+        {unreadCount > 0 && (
+          <span
+            className="absolute -top-2 -right-2 flex min-w-5 h-5 px-1 items-center justify-center rounded-full bg-red-500 text-[11px] leading-none font-bold text-white pointer-events-none"
+            aria-label={`${unreadCount} unread chat ${unreadCount === 1 ? 'message' : 'messages'}`}
+          >
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </span>
         )}
       </button>
     );
