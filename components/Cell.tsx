@@ -106,7 +106,7 @@ const Cell: React.FC<CellProps> = ({
     firstGameMoveDetails.coord.r === rowIndex && 
     firstGameMoveDetails.coord.c === colIndex;
 
-  let finalDisabled = baseDisabled || (value !== null && !isPotentiallySwappableCell);
+  const finalDisabled = baseDisabled || (value !== null && !isPotentiallySwappableCell);
 
 
   if (value === Player.ONE) {

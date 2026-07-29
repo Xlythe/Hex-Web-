@@ -110,7 +110,7 @@ export class GameOptions {
     // Ensure distinct names if both are human
     if (this.player2ControlType === PlayerControlType.HUMAN && this.player1Profile.name === this.player2Profile.name) {
         const baseP1Name = this.player1Profile.name;
-        let newP2Name = `${baseP1Name} 2`; 
+        const newP2Name = `${baseP1Name} 2`; 
 
         if (newP2Name === baseP1Name || newP2Name === DEFAULT_PLAYER_1_PROFILE_BASE.name ) { 
             this.player2Profile.name = DEFAULT_PLAYER_2_PROFILE_BASE.name;
@@ -215,7 +215,7 @@ export class GameOptions {
     const p2Stored = safeStorageGet('hexPlayer2Profile');
     if (p2Stored) try { p2Profile = JSON.parse(p2Stored); } catch (e) { /* use default */ }
 
-    let loadedTimerSettings: TimerSettings = { 
+    const loadedTimerSettings: TimerSettings = { 
         mode: DEFAULT_TIMER_SETTINGS.mode,
         durationPerTurn: DEFAULT_TIMER_SETTINGS.durationPerTurn,
         durationPerGame: DEFAULT_TIMER_SETTINGS.durationPerGame,

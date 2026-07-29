@@ -7,7 +7,6 @@ import {
   WaitingRoomPlayer,
   PlayerStat,
   WaitingRoomGameSetupParams,
-  IgHandlerGameOptions, // Assuming gameOptions is of this type or similar
   TimerMode,
   AllowedIncrementSecondsType,
 } from '../types';
@@ -144,6 +143,15 @@ const WaitingRoomScreen: React.FC = () => {
 
   // --- Local State ---
   const [isChatMaximized, setIsChatMaximized] = useState(false); 
+  const playerList = waitingRoomData?.playerList;
+  const currentUserData = useMemo(
+    () => playerList?.find(player => player.uid === loggedInUser?.uid),
+    [playerList, loggedInUser?.uid],
+  );
+  const isAnyPlayerReady = useMemo(
+    () => playerList?.some(player => player.stat === PlayerStat.OFFERSTART) || false,
+    [playerList],
+  );
 
   // --- Early Exit for Loading/Error States ---
   if (!waitingRoomData || !loggedInUser) {
@@ -159,27 +167,18 @@ const WaitingRoomScreen: React.FC = () => {
   // --- Destructure Data & Calculate Derived State ---
   const {
     sessionInfo,        
-    playerList,         
     gameOptions,        
     isCurrentUserHost,  
     isLoading: isWaitingRoomDataLoading, 
     error: waitingRoomError 
   } = waitingRoomData;
 
-  const currentUserData = useMemo(() => playerList?.find(p => p.uid === loggedInUser.uid), [playerList, loggedInUser.uid]);
   const currentUserPlayerPlace = currentUserData?.place; 
   const isCurrentUserPlayerReady = currentUserData?.stat === PlayerStat.OFFERSTART; 
 
   const canInteractGlobally = !isOnlineActionLoading && !isWaitingRoomDataLoading; // Renamed for clarity
   const isGameInInitPhase = sessionInfo?.status === 'INIT';
   const isTimerEffectivelyOff = gameOptions?.timerTotal === 0 && gameOptions?.timerInc === 0;
-
-  const isAnyPlayerReady = useMemo(() => {
-    return playerList?.some(p => p.stat === PlayerStat.OFFERSTART) || false;
-  }, [playerList]);
-
-  const canHostEditSettings = isCurrentUserHost && isGameInInitPhase && canInteractGlobally && !isAnyPlayerReady;
-
 
   // --- Event Handlers ---
 

@@ -216,7 +216,7 @@ export class GameController {
     this.setAiThinking(false);
 
     let currentBoardSize = this.options.boardSize;
-    let currentTimerSettings = { ...this.options.timerSettings };
+    const currentTimerSettings = { ...this.options.timerSettings };
 
     if (this.options.player2ControlType === PlayerControlType.ONLINE && serverConfirmedOptions) {
         // For online games, prioritize server-confirmed options
