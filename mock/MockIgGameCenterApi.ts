@@ -986,6 +986,47 @@ export class MockIgGameCenterApi {
             this.addEventToBoard(params.sid, "NOTICE", "0", `${playerOfferingStart.name} is already ready.`);
         }
         break;
+      case "END": {
+        const endingPlayer = boardSession.players.get(params.uid);
+        const otherPlayer = Array.from(boardSession.players.values())
+          .find(player => player.uid !== params.uid);
+        if (!endingPlayer || !otherPlayer) {
+          this.addEventToBoard(
+            params.sid,
+            "NOTICE",
+            "0",
+            "Both players are required to end a game.",
+          );
+          break;
+        }
+        if (params.type === "GIVEUP") {
+          endingPlayer.stat = PlayerStat.QUIT;
+          otherPlayer.stat = PlayerStat.WIN;
+        } else if (params.type === "CLAIMQUIT") {
+          endingPlayer.stat = PlayerStat.WIN;
+          otherPlayer.stat = PlayerStat.LOST;
+        } else {
+          this.addEventToBoard(
+            params.sid,
+            "NOTICE",
+            "0",
+            `Unsupported END type: ${params.type || "missing"}.`,
+          );
+          break;
+        }
+        boardSession.players.forEach(player => {
+          player.active = "0";
+          player.finished = "1";
+        });
+        boardSession.gameStatus = "FINISHED";
+        this.addEventToBoard(
+          params.sid,
+          "ENDGAME",
+          params.uid,
+          params.type,
+        );
+        break;
+      }
        case "LEAVE": 
         const leavingPlayerName = boardSession.players.get(params.uid)?.name || user.name || "A player";
         boardSession.players.delete(params.uid);

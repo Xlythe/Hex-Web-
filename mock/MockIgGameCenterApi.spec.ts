@@ -117,4 +117,90 @@ describe('MockIgGameCenterApi multiplayer contract', () => {
     expect(restartEvent?.uid).toBe(alice.uid);
     expect(restartEvent?.data).toMatch(/^mock_board_sid_/);
   });
+
+  it('delivers chat incrementally and models a player forfeit', async () => {
+    const alice = await createUser('Alice');
+    const bob = await createUser('Bob');
+    const board = await api.createBoardSession({
+      uid: alice.uid,
+      session_id: alice.session_id,
+      gid: '12',
+      place: '1',
+    }) as IgCreateBoardSuccessResponse;
+
+    await command(bob, board.sid);
+    await command(bob, board.sid, 'PLACE', { place: '2' });
+    const aliceReady = await command(alice, board.sid, 'START');
+    expect(aliceReady.sessionInfo.status).toBe('INIT');
+    await command(bob, board.sid, 'START');
+
+    const beforeMessage = await command(bob, board.sid, 'REFRESH');
+    const lastEventId = beforeMessage.eventList?.at(-1)?.eid || '0';
+    await command(alice, board.sid, 'MSG', { message: 'Good luck!' });
+    const received = await command(bob, board.sid, 'REFRESH', {
+      lasteid: lastEventId,
+    });
+    expect(received.eventList).toEqual([
+      expect.objectContaining({
+        type: 'MSG',
+        uid: alice.uid,
+        data: 'Good luck!',
+      }),
+    ]);
+
+    const forfeit = await command(alice, board.sid, 'END', {
+      type: 'GIVEUP',
+    });
+    expect(forfeit.sessionInfo.status).toBe('FINISHED');
+    expect(forfeit.eventList).toContainEqual(expect.objectContaining({
+      type: 'ENDGAME',
+      uid: alice.uid,
+      data: 'GIVEUP',
+    }));
+    expect(forfeit.playerList).toContainEqual(expect.objectContaining({
+      uid: alice.uid,
+      stat: 'QUIT',
+      finished: '1',
+    }));
+    expect(forfeit.playerList).toContainEqual(expect.objectContaining({
+      uid: bob.uid,
+      stat: 'WIN',
+      finished: '1',
+    }));
+  });
+
+  it('models a valid inactivity claim as a win for the claimant', async () => {
+    const alice = await createUser('Alice');
+    const bob = await createUser('Bob');
+    const board = await api.createBoardSession({
+      uid: alice.uid,
+      session_id: alice.session_id,
+      gid: '12',
+      place: '1',
+    }) as IgCreateBoardSuccessResponse;
+
+    await command(bob, board.sid);
+    await command(bob, board.sid, 'PLACE', { place: '2' });
+    await command(alice, board.sid, 'START');
+    await command(bob, board.sid, 'START');
+
+    const claim = await command(alice, board.sid, 'END', {
+      type: 'CLAIMQUIT',
+    });
+
+    expect(claim.sessionInfo.status).toBe('FINISHED');
+    expect(claim.eventList).toContainEqual(expect.objectContaining({
+      type: 'ENDGAME',
+      uid: alice.uid,
+      data: 'CLAIMQUIT',
+    }));
+    expect(claim.playerList).toContainEqual(expect.objectContaining({
+      uid: alice.uid,
+      stat: 'WIN',
+    }));
+    expect(claim.playerList).toContainEqual(expect.objectContaining({
+      uid: bob.uid,
+      stat: 'LOST',
+    }));
+  });
 });
