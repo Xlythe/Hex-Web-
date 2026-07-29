@@ -1,8 +1,7 @@
 
 import { BoardMatrix, Coordinate, Player, AiDifficulty } from './types';
 import { AiPlayerEasy } from './AiPlayerEasy';
-import { AiPlayerMedium } from './AiPlayerMedium';
-import { AiPlayerHard } from './AiPlayerHard';
+import { AiPlayerBee } from './AiPlayerBee';
 
 /**
  * @interface AiStrategy
@@ -11,6 +10,37 @@ import { AiPlayerHard } from './AiPlayerHard';
 interface AiStrategy {
   getMove(boardMatrix: BoardMatrix, playerSide: Player, emptyCells: Coordinate[]): Coordinate | null;
 }
+
+export interface AndroidBotDefinition {
+  difficulty: AiDifficulty;
+  algorithm: 'GameAI' | 'BeeAI';
+  maxDepth: number | null;
+  beamSize: number | null;
+}
+
+/**
+ * Parameters extracted from Android's production AiTypes factory.
+ */
+export const ANDROID_BOT_ROSTER: readonly AndroidBotDefinition[] = [
+  {
+    difficulty: AiDifficulty.EASY,
+    algorithm: 'GameAI',
+    maxDepth: null,
+    beamSize: null,
+  },
+  {
+    difficulty: AiDifficulty.MEDIUM,
+    algorithm: 'BeeAI',
+    maxDepth: 2,
+    beamSize: 5,
+  },
+  {
+    difficulty: AiDifficulty.HARD,
+    algorithm: 'BeeAI',
+    maxDepth: 3,
+    beamSize: 4,
+  },
+] as const;
 
 /**
  * @class AiPlayer
@@ -27,18 +57,15 @@ export class AiPlayer {
     this.name = name;
     // this.difficulty = difficulty;
 
-    // Medium strategy is needed by Hard strategy as a fallback.
-    const mediumStrategy = new AiPlayerMedium();
-
     switch (difficulty) {
       case AiDifficulty.EASY:
         this.strategy = new AiPlayerEasy();
         break;
       case AiDifficulty.MEDIUM:
-        this.strategy = mediumStrategy;
+        this.strategy = new AiPlayerBee(2, 5);
         break;
       case AiDifficulty.HARD:
-        this.strategy = new AiPlayerHard();
+        this.strategy = new AiPlayerBee(3, 4);
         break;
       default:
         console.warn(`Unknown AI difficulty: ${difficulty}. Defaulting to Easy.`);
