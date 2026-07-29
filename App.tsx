@@ -61,12 +61,13 @@ import { useSoundEffects } from './hooks/useSoundEffects';
 import { GameController } from './GameController';
 import { CurrentDisplayState as DisplayState } from './contexts/GameSessionProvider';
 
-// Type for screen orientation lock, extending the standard ScreenOrientation
+// Some browsers expose the Screen Orientation methods at runtime without
+// advertising them in every version of their DOM type definitions.
 type OrientationLockType = "any" | "natural" | "landscape" | "portrait" | "portrait-primary" | "portrait-secondary" | "landscape-primary" | "landscape-secondary";
-interface ExtendedScreenOrientation extends ScreenOrientation {
+type ExtendedScreenOrientation = ScreenOrientation & {
   lock?(orientation: OrientationLockType): Promise<void>;
-  unlock(): void;
-}
+  unlock?(): void;
+};
 
 // Helper Component: StatusDisplay
 // Displays game status messages, replay mode, AI thinking, etc.
@@ -502,7 +503,7 @@ const AppContent: React.FC = () => {
       openConfirmationModal({ title: "Leave Online Game?", message: "This will end your current online game and start a new local one. Are you sure?", onConfirmAction: async () => { await leaveOnlineGame(); startGame(); }, confirmButtonText: "Leave & Reset", confirmButtonClassName: "bg-red-600 hover:bg-red-700 text-white" });
       return;
     }
-    if (gameController?.canUndo() || gameController?.turnCount > 0) { 
+    if (gameController?.canUndo() || (gameController?.turnCount ?? 0) > 0) {
       openConfirmationModal({ title: "Reset Game?", message: "This will end the current game and start a new one. Are you sure?", onConfirmAction: startGame, confirmButtonText: "Reset Game", confirmButtonClassName: "bg-red-600 hover:bg-red-700 text-white" });
     } else {
       startGame(); 
@@ -514,7 +515,7 @@ const AppContent: React.FC = () => {
       openConfirmationModal({ title: "Leave Online Game for Replay?", message: "Starting a replay will end your current online game. Are you sure?", onConfirmAction: async () => { await leaveOnlineGame(); startReplay(gameToReplay); }, confirmButtonText: "Leave & Start Replay", confirmButtonClassName: "bg-red-600 hover:bg-red-700 text-white" });
       return;
     }
-    if (gameController?.canUndo() || gameController?.turnCount > 0) {
+    if (gameController?.canUndo() || (gameController?.turnCount ?? 0) > 0) {
       openConfirmationModal({ title: "Start Replay?", message: "Starting a replay will end the current game. Are you sure?", onConfirmAction: () => startReplay(gameToReplay), confirmButtonText: "Start Replay" });
     } else {
       startReplay(gameToReplay);
