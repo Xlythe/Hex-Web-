@@ -77,7 +77,6 @@ This application is built with React and TypeScript, styled with Tailwind CSS, a
 ### Note on API Keys & Online Play
 
 -   **igGameCenter Integration:** This application integrates with igGameCenter for online multiplayer functionality. The necessary `APP_ID` and `APP_CODE` for igGameCenter are hardcoded within the `IgGameCenterApi.ts` file. For the mock API (used if `DEBUG` is true in `Constants.ts`), these are not strictly used for external calls but are present. For live igGameCenter functionality, ensure these constants are correctly configured for your target igGameCenter application.
--   **Google Gemini API:** The project setup and coding guidelines include references to `process.env.API_KEY` for the Google Gemini API. **However, the core Hex game functionality provided does not currently utilize the Gemini API.** If you intend to extend the application with Gemini features in the future, you would need to ensure this environment variable is properly configured in your deployment environment. For running the Hex game locally as is, this key is not critical for the game's operation.
 
 ## Running Tests
 

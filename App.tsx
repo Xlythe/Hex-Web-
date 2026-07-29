@@ -58,8 +58,8 @@ import { useBackgroundMusic } from './hooks/useBackgroundMusic';
 import { useSoundEffects } from './hooks/useSoundEffects';
 
 // Logic & Engine Types
-import { GameController } from './logic/GameController';
-import { DisplayState } from './logic/GameState';
+import { GameController } from './GameController';
+import { CurrentDisplayState as DisplayState } from './contexts/GameSessionProvider';
 
 // Type for screen orientation lock, extending the standard ScreenOrientation
 type OrientationLockType = "any" | "natural" | "landscape" | "portrait" | "portrait-primary" | "portrait-secondary" | "landscape-primary" | "landscape-secondary";

@@ -6,6 +6,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Hex</title>
   <link rel="icon" href="https://xlythe.com/images/favicon.ico" type="image/x-icon">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     // Configure Tailwind CSS to use the 'class' strategy for dark mode
@@ -85,8 +88,6 @@
     body {
       font-family: 'Roboto', sans-serif;
     }
-    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
-
     /* Custom scrollbars */
     ::-webkit-scrollbar {
       width: 8px;
@@ -153,17 +154,6 @@
       opacity: var(--swappable-cell-hover-overlay-opacity, 0.7); /* Default to 0.7 if var not set */
     }
   </style>
-<script type="importmap">
-{
-  "imports": {
-    "react/": "https://esm.sh/react@^19.1.0/",
-    "react": "https://esm.sh/react@^19.1.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.1.0/",
-    "crypto": "https://esm.sh/crypto@^1.0.1"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
 </head>
 <body class="bg-theme-bg-light dark:bg-theme-bg-dark text-theme-text-primary dark:text-theme-icon-dark transition-colors duration-300">
   <noscript>You need to enable JavaScript to run this app.</noscript>

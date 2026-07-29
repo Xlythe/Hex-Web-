@@ -1,6 +1,6 @@
 
 import { AiPlayerHard } from './AiPlayerHard';
-import { BoardMatrix, Coordinate, Player } from '../types'; // Assuming types.ts is in parent directory
+import { BoardMatrix, Coordinate, Player } from './types';
 
 /**
  * @file AiPlayerHard.test.ts

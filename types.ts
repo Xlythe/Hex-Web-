@@ -7,6 +7,7 @@
 
 import { ALLOWED_INCREMENT_SECONDS } from "./Constants"; // Import for AllowedIncrementSecondsType
 import { AuthResult } from "./contexts/AuthManager"; // Import AuthResult type for AuthContextType
+import type { Dispatch, SetStateAction } from 'react';
 
 /**
  * @enum Player
@@ -949,7 +950,7 @@ export interface OnlinePlayContextType {
   isOnlineActionLoading: boolean;
   findOnlineGame: () => Promise<void>;
   leaveOnlineGame: () => Promise<void>;
-  setOnlineGameStatusMessage: React.Dispatch<React.SetStateAction<string | null>>;
+  setOnlineGameStatusMessage: Dispatch<SetStateAction<string | null>>;
   lobbyGames: LobbyGameSession[] | null;
   isFetchingLobby: boolean;
   lobbyError: string | null;
