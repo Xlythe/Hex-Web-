@@ -2,8 +2,9 @@
 // Basic test structure for GameController.ts
 import { GameController } from './GameController';
 import { GameOptions } from './GameOptions';
-import { Player, GamePhase, CellState, PlayerProfile } from './types';
+import { Player, GamePhase, CellState, PlayerProfile, PlayerControlType } from './types';
 import { DEFAULT_BOARD_SIZE, MIN_BOARD_SIZE, MAX_BOARD_SIZE, DEFAULT_PLAYER_1_PROFILE_BASE, DEFAULT_PLAYER_2_PROFILE_BASE } from './Constants';
+import { describe, expect, it } from 'vitest';
 
 /**
  * @file GameController.test.ts
@@ -13,6 +14,8 @@ import { DEFAULT_BOARD_SIZE, MIN_BOARD_SIZE, MAX_BOARD_SIZE, DEFAULT_PLAYER_1_PR
  * Note: These tests run in a browser console environment and do not use a formal test runner.
  */
 
+describe('GameController', () => {
+it('supports moves, undo, wins, swaps, and completed game data', async () => {
 console.log('Running tests for GameController.ts');
 let allTestsPassed = true;
 let updateCalledCount = 0; // Counter for mock onUpdate callback.
@@ -24,6 +27,8 @@ const defaultP2Profile: PlayerProfile = { ...DEFAULT_PLAYER_2_PROFILE_BASE, name
 
 // Initialize GameOptions and GameController for tests.
 const options = new GameOptions(DEFAULT_BOARD_SIZE, undefined, undefined, defaultP1Profile, defaultP2Profile);
+options.player2ControlType = PlayerControlType.HUMAN;
+options.swapRuleEnabled = false;
 const game = new GameController(options, mockOnUpdate);
 
 // Test: startGame functionality.
@@ -38,7 +43,6 @@ if (game.gamePhase !== GamePhase.PLAYING || game.turnCount !== 0 || updateCalled
   console.log('Test PASSED: startGame initializes game phase, turn count, and calls onUpdate.');
 }
 // Check if the randomization flag for player side assignment is set.
-// @ts-ignore: Accessing private member for test validation.
 if (typeof game.isPlayer1ProfileAssignedToSideONE_atGameStart !== 'boolean') {
   console.error(`Test FAILED: startGame did not set isPlayer1ProfileAssignedToSideONE_atGameStart to a boolean.`);
   allTestsPassed = false;
@@ -58,7 +62,7 @@ if (game.playerAgent1.profile.name !== defaultP1Profile.name || game.playerAgent
 // Verifies piece placement, turn count increment, and update callback.
 updateCalledCount = 0;
 const initialCurrentPlayer = game.currentPlayerId;
-game.makeMove(0, 0); // Assumes board is at least 1x1.
+await game.makeMove(0, 0); // Assumes board is at least 1x1.
 if (game.boardMatrix[0][0] !== initialCurrentPlayer || game.turnCount !== 1 || updateCalledCount === 0) {
   console.error(`Test FAILED: makeMove did not place piece, increment turn, or call onUpdate. Cell: ${String(game.boardMatrix[0][0])}, Turns: ${game.turnCount}, Updates: ${updateCalledCount}`);
   allTestsPassed = false;
@@ -71,7 +75,7 @@ const playerAfterFirstMove = game.boardMatrix[0][0];
 // Verifies that attempting to move on an occupied cell does not change game state or call update.
 updateCalledCount = 0;
 const turnCountBeforeOccupiedMove = game.turnCount;
-game.makeMove(0,0); // Attempt to move on the same cell.
+await game.makeMove(0,0); // Attempt to move on the same cell.
 if(game.turnCount !== turnCountBeforeOccupiedMove || updateCalledCount > 0){ // Should not update if move is invalid.
     console.error(`Test FAILED: makeMove on occupied cell changed turnCount or called update. Turns: ${game.turnCount}, Updates: ${updateCalledCount}`);
     allTestsPassed = false;
@@ -183,14 +187,14 @@ updateCalledCount = 0;
 game.startGame();
 game.options.swapRuleEnabled = true;
 
-// @ts-ignore: Forcing player 1 config to start as Player.ONE side for predictable test
+// @ts-expect-error: Forcing player 1 config to start as Player.ONE side for predictable test
 game._isPlayer1ProfileAssignedToSideONE_atGameStart = true;
 game.currentPlayerId = Player.ONE; // Ensure P1 (Player.ONE side) starts
 
 const firstMoverSide: Player = Player.ONE as Player; 
 
 const firstMoveCoord = {r: 0, c: 0}; 
-game.makeMove(firstMoveCoord.r, firstMoveCoord.c); // First player (Player.ONE side) makes a move. 
+await game.makeMove(firstMoveCoord.r, firstMoveCoord.c); // First player (Player.ONE side) makes a move. 
 
 const firstMoveDetailsForSwapTest = game.firstGameMoveDetails;
 if (!firstMoveDetailsForSwapTest || Number(firstMoveDetailsForSwapTest.player) !== Number(firstMoverSide)) {
@@ -207,7 +211,7 @@ if (Number(secondMoverSide) !== Number(Player.TWO)) {
 
 updateCalledCount = 0; // Reset for the swap action
 if (firstMoveDetailsForSwapTest) { // Check if firstMoveDetailsForSwapTest is not null before accessing its properties
-    game.makeMove(firstMoveDetailsForSwapTest.coord.r, firstMoveDetailsForSwapTest.coord.c); // Second mover (Player.TWO side) swaps.
+    await game.makeMove(firstMoveDetailsForSwapTest.coord.r, firstMoveDetailsForSwapTest.coord.c); // Second mover (Player.TWO side) swaps.
 
     if (!game.isPlayerRolesSwapped) {
         console.error("Test FAILED (Swap - Current Player): isPlayerRolesSwapped is not true after swap.");
@@ -252,7 +256,7 @@ const scenarios = [
 
 scenarios.forEach(scenario => {
   // Manually set internal state for each test scenario.
-  // @ts-ignore: Accessing private member for test setup.
+  // @ts-expect-error: Accessing private member for test setup.
   testController._isPlayer1ProfileAssignedToSideONE_atGameStart = scenario.p1StartsAsONE;
   testController.isPlayerRolesSwapped = scenario.swapped;
 
@@ -285,10 +289,10 @@ console.log('--- End of getParticipantProfileForBoardSide tests ---');
 // Test: getCompletedGameData includes the correct randomization flag.
 // Verifies that 'wasPlayer1ProfileAssignedToSideONE_atGameStart' is correctly stored.
 game.startGame(); // This will randomize isPlayer1ProfileAssignedToSideONE_atGameStart.
-// @ts-ignore: Accessing private member for test validation.
+// @ts-expect-error: Accessing private member for test validation.
 const internalRandomFlag = game._isPlayer1ProfileAssignedToSideONE_atGameStart;
 // Simulate a game end to generate completed game data.
-// @ts-ignore: Calling private method for test setup.
+// @ts-expect-error: Calling private method for test setup.
 game.endGame(Player.ONE, 'connection', [{r:0, c:0}]);
 const completedData = game.getCompletedGameData();
 
@@ -335,3 +339,6 @@ function createEmptyBoard(size: number, minSize: number, maxSize: number, defaul
   }
   return Array(finalSize).fill(null).map(() => Array(finalSize).fill(null));
 }
+expect(allTestsPassed).toBe(true);
+});
+});

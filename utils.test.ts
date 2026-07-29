@@ -8,7 +8,10 @@
 
 import { formatTime, createEmptyBoard } from './utils';
 import { MIN_BOARD_SIZE, MAX_BOARD_SIZE, DEFAULT_BOARD_SIZE } from './Constants';
+import { describe, expect, it } from 'vitest';
 
+describe('utility functions', () => {
+it('formats time and creates validated empty boards', () => {
 console.log('Running tests for utils.ts');
 let allTestsPassed = true;
 
@@ -82,3 +85,6 @@ if (allTestsPassed) {
 } else {
   console.error('Some utils.ts tests FAILED.');
 }
+expect(allTestsPassed).toBe(true);
+});
+});

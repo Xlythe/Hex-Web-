@@ -2,8 +2,6 @@
 // Basic tests for `Constants.ts` to ensure values are within expected ranges and defaults are sensible.
 // This simple test suite runs in the browser console and doesn't use a formal test runner like Jest.
 
-console.log('Running tests for gameConstants.ts');
-
 import { 
     DEFAULT_BOARD_SIZE, MIN_BOARD_SIZE, MAX_BOARD_SIZE, 
     COLOR_PALETTE, 
@@ -12,6 +10,11 @@ import {
     DEFAULT_PLAYER_1_PROFILE_BASE, DEFAULT_PLAYER_2_PROFILE_BASE, 
     ColorPaletteType 
 } from './Constants';
+import { describe, expect, it } from 'vitest';
+
+describe('game constants', () => {
+it('keeps defaults internally valid', () => {
+console.log('Running tests for gameConstants.ts');
 
 let allTestsPassed = true;
 
@@ -78,3 +81,6 @@ if (allTestsPassed) {
 } else {
   console.error('Some gameConstants.ts tests FAILED.');
 }
+expect(allTestsPassed).toBe(true);
+});
+});

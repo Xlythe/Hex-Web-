@@ -12,6 +12,7 @@ import {
     AllowedIncrementSecondsType, DEFAULT_CHAT_NOTIFICATIONS_ENABLED // Added this import
 } from './Constants';
 import { PlayerControlType, TimerMode, PlayerProfile, TimerSettings, AiDifficulty } from './types';
+import { describe, expect, it } from 'vitest';
 
 /**
  * @file GameOptions.test.ts
@@ -25,6 +26,8 @@ import { PlayerControlType, TimerMode, PlayerProfile, TimerSettings, AiDifficult
  * - Enforcement of online-specific rules (swap, timer, board size).
  * These tests run directly in the browser console.
  */
+describe('GameOptions', () => {
+it('validates, normalizes, and persists local and online settings', () => {
 console.log('Running tests for GameOptions.ts');
 let allTestsPassed = true;
 
@@ -400,3 +403,6 @@ if (allTestsPassed) {
 } else {
   console.error('ONE OR MORE GameOptions.ts tests FAILED.');
 }
+expect(allTestsPassed).toBe(true);
+});
+});

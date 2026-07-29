@@ -11,12 +11,15 @@
  * the type definition itself.
  * Tests are executed in the browser console.
  */
-console.log('Running tests for MoveRecord.ts (interface validation)');
-let allTestsPassed = true;
-
 // Example: Create a conforming object
 import { Player, BoardMatrix, FirstGameMoveDetails, Coordinate } from './types'; // Assuming Player enum is accessible
 import { MoveRecord } from './MoveRecord';
+import { describe, expect, it } from 'vitest';
+
+describe('MoveRecord', () => {
+it('represents minimal and detailed game snapshots', () => {
+console.log('Running tests for MoveRecord.ts (interface validation)');
+let allTestsPassed = true;
 
 // Test: Basic MoveRecord object creation and conformance.
 // Verifies that a minimal object satisfying the MoveRecord interface can be created.
@@ -64,3 +67,6 @@ if (allTestsPassed) {
 } else {
   console.error('Some MoveRecord.ts tests FAILED.');
 }
+expect(allTestsPassed).toBe(true);
+});
+});

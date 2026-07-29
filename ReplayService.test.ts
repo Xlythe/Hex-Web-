@@ -3,6 +3,7 @@
 import { ReplayService, ReplaySnapshot } from './ReplayService';
 import { CompletedGameEntry, Player, GamePhase, WinReason, HistoryEntry } from './types';
 import { DEFAULT_PLAYER_1_PROFILE_BASE, DEFAULT_PLAYER_2_PROFILE_BASE, DEFAULT_TIMER_SETTINGS } from './Constants';
+import { describe, expect, it } from 'vitest';
 
 /**
  * @file ReplayService.test.ts
@@ -16,16 +17,19 @@ import { DEFAULT_PLAYER_1_PROFILE_BASE, DEFAULT_PLAYER_2_PROFILE_BASE, DEFAULT_T
  * Tests use mock `CompletedGameEntry` data and simulate timer progression to step through replays.
  * Results are logged to the browser console.
  */
+describe('ReplayService', () => {
+it('replays snapshots, stops, and disposes cleanly', () => {
 console.log('Running tests for ReplayService.ts');
 let allTestsPassed = true;
-let lastSnapshot: ReplaySnapshot | null = null; // Stores the most recent snapshot from the service.
+const replayUpdate = { lastSnapshot: null as ReplaySnapshot | null };
 let updateCount = 0; // Counts how many times the onUpdateCallback is invoked.
 
 /** Mock callback for ReplayService to track snapshot updates. */
 const mockReplayUpdate = (snapshot: ReplaySnapshot | null) => {
-  lastSnapshot = snapshot;
+  replayUpdate.lastSnapshot = snapshot;
   updateCount++;
 };
+const currentSnapshot = (): ReplaySnapshot | null => replayUpdate.lastSnapshot;
 
 const replayService = new ReplayService(mockReplayUpdate);
 
@@ -96,22 +100,23 @@ function testReplayScenario(gameToTest: CompletedGameEntry, description: string)
     console.log(`--- Testing Replay Scenario: ${description} ---`);
     replayService.stopReplay(false); // Ensure clean state before starting
     updateCount = 0;
-    lastSnapshot = null;
+    replayUpdate.lastSnapshot = null;
     
     replayService.startReplay(gameToTest);
+    const initialSnapshot = currentSnapshot();
 
     // Initial checks after startReplay
-    if (!replayService.isActive || !lastSnapshot || lastSnapshot.currentStepIndex !== -1 || updateCount === 0) {
-        console.error(`Test FAILED (${description}): startReplay did not initialize correctly. Active: ${replayService.isActive}, Snapshot Step: ${lastSnapshot?.currentStepIndex}, Updates: ${updateCount}`);
+    if (!replayService.isActive || !initialSnapshot || initialSnapshot.currentStepIndex !== -1 || updateCount === 0) {
+        console.error(`Test FAILED (${description}): startReplay did not initialize correctly. Active: ${replayService.isActive}, Snapshot Step: ${initialSnapshot?.currentStepIndex}, Updates: ${updateCount}`);
         allTestsPassed = false;
         return;
     }
-    if (lastSnapshot.gameToReplay?.id !== gameToTest.id) {
+    if (initialSnapshot.gameToReplay?.id !== gameToTest.id) {
         console.error(`Test FAILED (${description}): Initial snapshot gameToReplay ID mismatch.`);
         allTestsPassed = false;
     }
     // Verify configured player profiles in the snapshot match the game entry.
-    if (lastSnapshot.player1Profile.name !== gameToTest.player1Profile.name || lastSnapshot.player2Profile.name !== gameToTest.player2Profile.name) {
+    if (initialSnapshot.player1Profile.name !== gameToTest.player1Profile.name || initialSnapshot.player2Profile.name !== gameToTest.player2Profile.name) {
         console.error(`Test FAILED (${description}): Initial snapshot configured player profiles mismatch.`);
         allTestsPassed = false;
     }
@@ -120,19 +125,20 @@ function testReplayScenario(gameToTest: CompletedGameEntry, description: string)
     // Manually step through each history entry
     for (let i = 0; i < gameToTest.history.length; i++) {
         if (!replayService.isActive) {
-            console.error(`Test FAILED (${description}): Replay became inactive prematurely at target step index ${i} (snapshot index ${lastSnapshot?.currentStepIndex}).`);
+            console.error(`Test FAILED (${description}): Replay became inactive prematurely at target step index ${i} (snapshot index ${currentSnapshot()?.currentStepIndex}).`);
             allTestsPassed = false; scenarioPassed = false; break;
         }
         // Simulate timer firing by directly calling playNextStep
         (replayService as any).playNextStep(); 
+        const stepSnapshot = currentSnapshot();
 
-        if (!lastSnapshot) {
+        if (!stepSnapshot) {
             console.error(`Test FAILED (${description}): lastSnapshot is null during stepping at index ${i}.`);
             allTestsPassed = false; scenarioPassed = false; break;
         }
         // Check if the snapshot's currentStepIndex matches the loop index.
-        if (lastSnapshot.currentStepIndex !== i) {
-            console.error(`Test FAILED (${description}): Expected currentStepIndex ${i}, got ${lastSnapshot.currentStepIndex}`);
+        if (stepSnapshot.currentStepIndex !== i) {
+            console.error(`Test FAILED (${description}): Expected currentStepIndex ${i}, got ${stepSnapshot.currentStepIndex}`);
             allTestsPassed = false; scenarioPassed = false; break;
         }
         
@@ -140,12 +146,12 @@ function testReplayScenario(gameToTest: CompletedGameEntry, description: string)
         const expectedWasP1AssignedONE = gameToTest.wasPlayer1ProfileAssignedToSideONE_atGameStart;
         const expectedIsSwappedFromHistoryEntry = gameToTest.history[i].isPlayerRolesSwapped;
 
-        if (lastSnapshot.wasPlayer1ProfileAssignedToSideONE_atGameStart !== expectedWasP1AssignedONE) {
-            console.error(`Test FAILED (${description}): Snapshot at step ${i}, wasPlayer1ProfileAssignedToSideONE_atGameStart mismatch. Expected ${expectedWasP1AssignedONE}, Got ${lastSnapshot.wasPlayer1ProfileAssignedToSideONE_atGameStart}`);
+        if (stepSnapshot.wasPlayer1ProfileAssignedToSideONE_atGameStart !== expectedWasP1AssignedONE) {
+            console.error(`Test FAILED (${description}): Snapshot at step ${i}, wasPlayer1ProfileAssignedToSideONE_atGameStart mismatch. Expected ${expectedWasP1AssignedONE}, Got ${stepSnapshot.wasPlayer1ProfileAssignedToSideONE_atGameStart}`);
             allTestsPassed = false; scenarioPassed = false;
         }
-        if (lastSnapshot.isPlayerRolesSwapped !== expectedIsSwappedFromHistoryEntry) {
-            console.error(`Test FAILED (${description}): Snapshot at step ${i}, isPlayerRolesSwapped (from history) mismatch. Expected ${expectedIsSwappedFromHistoryEntry}, Got ${lastSnapshot.isPlayerRolesSwapped}`);
+        if (stepSnapshot.isPlayerRolesSwapped !== expectedIsSwappedFromHistoryEntry) {
+            console.error(`Test FAILED (${description}): Snapshot at step ${i}, isPlayerRolesSwapped (from history) mismatch. Expected ${expectedIsSwappedFromHistoryEntry}, Got ${stepSnapshot.isPlayerRolesSwapped}`);
             allTestsPassed = false; scenarioPassed = false;
         }
     }
@@ -154,13 +160,14 @@ function testReplayScenario(gameToTest: CompletedGameEntry, description: string)
     if (scenarioPassed && replayService.isActive) {
         (replayService as any).playNextStep(); // Final step to end replay
     }
+    const finalSnapshot = currentSnapshot();
 
     // Final checks for replay completion
     if (replayService.isActive) {
-        console.error(`Test FAILED (${description}): Replay still active after all steps. Step: ${lastSnapshot?.currentStepIndex}, Total History Entries: ${gameToTest.history.length}`);
+        console.error(`Test FAILED (${description}): Replay still active after all steps. Step: ${finalSnapshot?.currentStepIndex}, Total History Entries: ${gameToTest.history.length}`);
         allTestsPassed = false; scenarioPassed = false;
-    } else if (scenarioPassed && gameToTest.history.length > 0 && (!lastSnapshot || lastSnapshot.currentStepIndex !== gameToTest.history.length - 1)) {
-        console.error(`Test FAILED (${description}): Replay ended on incorrect step. Ended at index: ${lastSnapshot?.currentStepIndex}, Expected last index: ${gameToTest.history.length - 1}`);
+    } else if (scenarioPassed && gameToTest.history.length > 0 && (!finalSnapshot || finalSnapshot.currentStepIndex !== gameToTest.history.length - 1)) {
+        console.error(`Test FAILED (${description}): Replay ended on incorrect step. Ended at index: ${finalSnapshot?.currentStepIndex}, Expected last index: ${gameToTest.history.length - 1}`);
         allTestsPassed = false; scenarioPassed = false;
     }
     
@@ -178,14 +185,15 @@ testReplayScenario(mockGame_P2StartsONE_SwapInHistory, "P2 Config Starts as Side
 // Test: stopReplay basic functionality
 // Verifies that stopReplay deactivates the replay and notifies if requested.
 updateCount = 0;
-lastSnapshot = null;
+replayUpdate.lastSnapshot = null;
 replayService.startReplay(mockGame_P1StartsONE_NoSwapInHistory); 
 (replayService as any).playNextStep(); // Advance one step to ensure it's running
 
 updateCount = 0; // Reset counter before testing stopReplay
 replayService.stopReplay(true); // Stop with notification
-if (replayService.isActive || (lastSnapshot && lastSnapshot.isActive)) {
-  console.error(`Test FAILED (stopReplay): Did not deactivate replay. ReplayActive: ${replayService.isActive}, SnapshotActive: ${lastSnapshot?.isActive}`);
+const stoppedSnapshot = currentSnapshot();
+if (replayService.isActive || stoppedSnapshot?.isActive) {
+  console.error(`Test FAILED (stopReplay): Did not deactivate replay. ReplayActive: ${replayService.isActive}, SnapshotActive: ${stoppedSnapshot?.isActive}`);
   allTestsPassed = false;
 } else if (updateCount === 0) {
   console.error('Test FAILED (stopReplay): Did not call onUpdate when notify=true.');
@@ -209,3 +217,6 @@ if (allTestsPassed) {
 } else {
   console.error('Some ReplayService.ts tests FAILED (manual stepping with scenarios).');
 }
+expect(allTestsPassed).toBe(true);
+});
+});

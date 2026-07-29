@@ -4,6 +4,7 @@ import { GameHistory } from './GameHistory';
 import { MoveRecord } from './MoveRecord';
 import { Player } // Assuming Player enum is accessible
 from './types'; 
+import { describe, expect, it } from 'vitest';
 
 /**
  * @file GameHistory.test.ts
@@ -15,6 +16,8 @@ from './types';
  * through proper deep cloning.
  */
 
+describe('GameHistory', () => {
+it('stores immutable snapshots and supports undo', () => {
 console.log('Running tests for GameHistory.ts');
 let allTestsPassed = true;
 
@@ -214,3 +217,6 @@ if (allTestsPassed) {
 } else {
   console.error('Some GameHistory.ts tests FAILED.');
 }
+expect(allTestsPassed).toBe(true);
+});
+});

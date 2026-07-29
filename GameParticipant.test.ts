@@ -3,6 +3,7 @@
 import { GameParticipant } from './GameParticipant';
 import { Player } from './types';
 import { DEFAULT_PLAYER_1_PROFILE_BASE, DEFAULT_PLAYER_2_PROFILE_BASE, COLOR_PALETTE } from './Constants';
+import { describe, expect, it } from 'vitest';
 
 /**
  * @file GameParticipant.test.ts
@@ -11,6 +12,8 @@ import { DEFAULT_PLAYER_1_PROFILE_BASE, DEFAULT_PLAYER_2_PROFILE_BASE, COLOR_PAL
  * and validation logic (e.g., name trimming, color defaulting on invalid input).
  * Tests are executed in the browser console.
  */
+describe('GameParticipant', () => {
+it('normalizes and updates player profiles', () => {
 console.log('Running tests for GameParticipant.ts');
 let allTestsPassed = true;
 
@@ -83,3 +86,6 @@ if (allTestsPassed) {
 } else {
   console.error('Some GameParticipant.ts tests FAILED.');
 }
+expect(allTestsPassed).toBe(true);
+});
+});
