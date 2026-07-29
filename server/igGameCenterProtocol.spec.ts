@@ -4,6 +4,7 @@ import {
   decodeHexMove,
   encodeHexMove,
   IGGC_POLL_INTERVAL_MS,
+  isClaimQuitResponse,
   isValidServerName,
   nextPollDelayMs,
   parseLegacyUndoEvent,
@@ -62,6 +63,19 @@ describe('legacy Android igGameCenter protocol', () => {
       type: 'RESTART',
       data: '9876',
     })).toBe('9876');
+  });
+
+  it('accepts either command casing for legacy claim-forfeit responses', () => {
+    const event = {
+      eid: '22',
+      stamp: 4,
+      uid: '7',
+      type: 'endgame',
+      data: 'claimquit',
+    };
+    expect(isClaimQuitResponse('END', [event])).toBe(true);
+    expect(isClaimQuitResponse('end', [event])).toBe(true);
+    expect(isClaimQuitResponse('MOVE', [event])).toBe(false);
   });
 
   it('uses a conservative keep-alive interval and validates server routing', () => {

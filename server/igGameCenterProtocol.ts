@@ -88,10 +88,19 @@ export const parseLegacyUndoEvent = (event: IgGameEvent): LegacyUndoEvent | null
 };
 
 export const parseRestartSessionId = (event: IgGameEvent): string | null => {
-  if (event.type !== 'RESTART') return null;
-  const sid = event.data?.trim();
-  return sid ? sid : null;
+    if (event.type !== 'RESTART') return null;
+    const sid = event.data?.trim();
+    return sid ? sid : null;
 };
+
+export const isClaimQuitResponse = (
+  command: string | undefined,
+  events: IgGameEvent[] | undefined,
+): boolean => command?.toUpperCase() === 'END'
+  && events?.some(event =>
+    event.type.toUpperCase() === 'ENDGAME'
+    && event.data?.toUpperCase().includes('CLAIMQUIT')
+  ) === true;
 
 export const isValidServerName = (serverName: string): boolean =>
   /^[a-z0-9][a-z0-9-]{0,62}$/i.test(serverName);

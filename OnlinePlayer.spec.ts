@@ -59,4 +59,19 @@ describe('OnlinePlayer command queue', () => {
     expect(sentParams[1]).toMatchObject({ cmd: 'REFRESH', lasteid: '5' });
     expect(player.lastEventId).toBe('6');
   });
+
+  it('does not allow a caller to replace the current event cursor', async () => {
+    const sentParams: IgCommandHandlerFullParams[] = [];
+    vi.spyOn(api, 'handleGameCommand').mockImplementation(async params => {
+      sentParams.push({ ...params });
+      return responseWithEvent('12');
+    });
+    const player = new OnlinePlayer('Bob');
+    player.setSessionInfo('game-session', 'gc1');
+    player.lastEventId = '11';
+
+    await player.sendCommand('START', user, { lasteid: '0' });
+
+    expect(sentParams[0]).toMatchObject({ cmd: 'START', lasteid: '11' });
+  });
 });

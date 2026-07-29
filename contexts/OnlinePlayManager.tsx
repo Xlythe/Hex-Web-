@@ -53,6 +53,7 @@ import {
   createUndoCommandParams,
   decodeHexMove,
   IGGC_POLL_INTERVAL_MS,
+  isClaimQuitResponse,
   nextPollDelayMs,
   parseLegacyUndoEvent,
   parseRestartSessionId,
@@ -530,7 +531,10 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
               addSystemChatMessage(winnerMsg);
             }
             let reason = WinReason.CONNECTION;
-            if (pInfo.uid === loggedInUser?.uid && successResponse.sessionInfo.cmd === "END" && successResponse.eventList?.some(e => e.type === "ENDGAME" && e.data?.includes("CLAIMQUIT"))) {
+            if (pInfo.uid === loggedInUser?.uid && isClaimQuitResponse(
+              successResponse.sessionInfo.cmd,
+              successResponse.eventList,
+            )) {
               reason = WinReason.CLAIMED;
             }
             gameController.endGame(winnerSide, reason, null);
@@ -574,7 +578,10 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
         const winnerInfo = successResponse.playerList?.find(p => p.stat === PlayerStat.WIN);
         const winnerPlayerSide = winnerInfo ? (winnerInfo.place === '1' ? Player.ONE : Player.TWO) : null;
         let reason = winnerPlayerSide ? WinReason.CONNECTION : null;
-        if (winnerPlayerSide && winnerInfo?.uid === loggedInUser?.uid && successResponse.sessionInfo.cmd === "END" && successResponse.eventList?.some(e => e.type === "ENDGAME" && e.data?.includes("CLAIMQUIT"))) {
+        if (winnerPlayerSide && winnerInfo?.uid === loggedInUser?.uid && isClaimQuitResponse(
+          successResponse.sessionInfo.cmd,
+          successResponse.eventList,
+        )) {
           reason = WinReason.CLAIMED;
         }
         gameController.endGame(winnerPlayerSide, reason, null);
@@ -708,6 +715,8 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
     const sidForServer = onlineGameSessionId;
     const serverForServer = onlineGameServer;
     const userForServer = loggedInUser;
+    const lastEventIdForServer =
+      gameController?.onlineOpponent?.lastEventId ?? "0";
 
     _resetLocalOnlineState();
     setOnlineGameStatusMessage("You have left the game session.");
@@ -719,7 +728,7 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
             await api.handleGameCommand({
                 app_id: APP_ID, app_code: APP_CODE,
                 uid: userForServer.uid, session_id: userForServer.session_id,
-                sid: sidForServer, cmd: 'LEAVE', lasteid: "0",
+                sid: sidForServer, cmd: 'LEAVE', lasteid: lastEventIdForServer,
             }, serverForServer);
             if (DEBUG) console.log(`OnlinePlayManager: LEAVE command for SID ${sidForServer} acknowledged by server (or sent without error).`);
         } catch (err: any) {
@@ -728,7 +737,13 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
             setIsOnlineActionLoading(false);
         }
     }
-  }, [loggedInUser, onlineGameSessionId, onlineGameServer, _resetLocalOnlineState]);
+  }, [
+    loggedInUser,
+    onlineGameSessionId,
+    onlineGameServer,
+    gameController,
+    _resetLocalOnlineState,
+  ]);
 
   const createOnlineGame = useCallback(async (settings: CustomGameSettings): Promise<boolean> => {
     if (!loggedInUser || !gameController) {
