@@ -1,5 +1,5 @@
 
-import React, { createContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import {
   LoggedInUser,
   IgUserRegistrationParams,
@@ -79,6 +79,9 @@ interface AuthManagerProviderProps {
  * - Implements in-memory caching for user profiles, with background fetch on login.
  */
 export const AuthManagerProvider: React.FC<AuthManagerProviderProps> = ({ children }) => {
+  const shouldValidateStoredSession = useRef(
+    localStorage.getItem(LOGGED_IN_USER_STORAGE_KEY) !== null,
+  );
   const [loggedInUser, setLoggedInUser] = useState<LoggedInUser | null>(() => {
     const storedUserJson = localStorage.getItem(LOGGED_IN_USER_STORAGE_KEY);
     if (storedUserJson) {
@@ -191,6 +194,29 @@ export const AuthManagerProvider: React.FC<AuthManagerProviderProps> = ({ childr
       }
     }
   }, []);
+
+  useEffect(() => {
+    if (!loggedInUser || !shouldValidateStoredSession.current) return;
+    shouldValidateStoredSession.current = false;
+    let cancelled = false;
+
+    void _fetchAndCacheProfile(loggedInUser.uid, loggedInUser.session_id, true)
+      .then(result => {
+        if (cancelled || !result.error) return;
+        const message = result.message.toUpperCase();
+        if (
+          result.httpStatusCode === 401
+          || result.httpStatusCode === 403
+          || message.includes('INVALID_SESSION')
+        ) {
+          setLoggedInUser(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loggedInUser, _fetchAndCacheProfile]);
 
 
   const handleLoginSuccess = useCallback((user: { uid: string; name: string; session_id: string; }) => {
