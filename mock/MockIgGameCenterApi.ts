@@ -18,6 +18,7 @@ import {
 import { getOrGenerateNetworkUid } from '../utils'; // Utility function (not directly used in this mock's core logic but might be relevant for a fuller implementation).
 import { APP_ID, APP_CODE } from '../IgGameCenterApi'; // Constants for a real API (not used in mock).
 import { MOCK_BOT_UID, MOCK_BOT_NAME, DEFAULT_BOARD_SIZE, DEBUG, HEX_GID } from '../Constants'; // Constants for identifying the mock bot.
+import { decodeHexMove, encodeHexMove } from '../server/igGameCenterProtocol';
 
 /**
  * @interface StoredMockUser
@@ -53,8 +54,14 @@ interface MockBoardSessionData {
   isBotTurnInProgress: boolean;
   botAutoJoinTimeoutId?: number;
   botAutoReadyTimeoutId?: number;
+  pendingUndoMoveIndex?: number;
 }
 
+export interface MockIgGameCenterApiOptions {
+  enableBot?: boolean;
+  latencyMs?: number;
+  verbose?: boolean;
+}
 
 /**
  * @class MockIgGameCenterApi
@@ -69,8 +76,14 @@ export class MockIgGameCenterApi {
   private nextBoardSidCounter: number = 1;
   private mockBoardSessions: Map<string, MockBoardSessionData> = new Map();
   private botMoveTimeoutId: Map<string, number> = new Map();
+  private readonly enableBot: boolean;
+  private readonly latencyMs?: number;
+  private readonly verbose: boolean;
 
-  constructor() {
+  constructor(options: MockIgGameCenterApiOptions = {}) {
+    this.enableBot = options.enableBot ?? true;
+    this.latencyMs = options.latencyMs;
+    this.verbose = options.verbose ?? DEBUG;
     if (!this.users.has(MOCK_BOT_UID)) {
         const botUser: StoredMockUser = {
             uid: MOCK_BOT_UID,
@@ -89,6 +102,12 @@ export class MockIgGameCenterApi {
             error: false, 
         });
     }
+  }
+
+  private async delay(defaultMs: number): Promise<void> {
+    const delayMs = this.latencyMs ?? defaultMs;
+    if (delayMs <= 0) return;
+    await new Promise(resolve => setTimeout(resolve, delayMs));
   }
 
   private generateUid(): string {
@@ -124,7 +143,7 @@ export class MockIgGameCenterApi {
         data                                        
     };
     boardSession.events.push(newEvent); 
-    if (DEBUG) console.log(`MockAPI Event [SID:${sid}, EID:${newEvent.eid}]: Type=${type}, UID=${uid}, Data=${data || "N/A"}`);
+    if (this.verbose) console.log(`MockAPI Event [SID:${sid}, EID:${newEvent.eid}]: Type=${type}, UID=${uid}, Data=${data || "N/A"}`);
     return newEvent;
   }
 
@@ -149,6 +168,7 @@ export class MockIgGameCenterApi {
   }
 
   private scheduleBotAutoJoinIfApplicable(sid: string): void {
+    if (!this.enableBot) return;
     const boardSession = this.mockBoardSessions.get(sid);
     if (!boardSession || boardSession.gameStatus !== 'INIT' || boardSession.players.size >= 2 || boardSession.aiPlayerUid) {
         return; 
@@ -185,6 +205,7 @@ export class MockIgGameCenterApi {
   }
 
   private scheduleBotAutoReadyUpIfApplicable(sid: string): void {
+    if (!this.enableBot) return;
     const boardSession = this.mockBoardSessions.get(sid);
     if (!boardSession || boardSession.gameStatus !== 'INIT' || !boardSession.aiPlayerUid) {
         return;
@@ -246,7 +267,7 @@ export class MockIgGameCenterApi {
                 this.scheduleBotMove(sid);
             }
         } else {
-             if (DEBUG) console.error(`MockAPI tryStartActiveGame: Player places not correctly set for SID ${sid}.`);
+             if (this.verbose) console.error(`MockAPI tryStartActiveGame: Player places not correctly set for SID ${sid}.`);
              playerArray[0].active = '1'; playerArray[1].active = '0';
              this.addEventToBoard(sid, "NOTICE", "0", `${playerArray[0].name} to move first (defaulted).`);
              if (playerArray[0].uid === boardSession.aiPlayerUid) this.scheduleBotMove(sid);
@@ -255,6 +276,7 @@ export class MockIgGameCenterApi {
   }
 
   private scheduleBotMove(sid: string): void {
+    if (!this.enableBot) return;
     const boardSession = this.mockBoardSessions.get(sid);
     if (!boardSession || boardSession.gameStatus !== 'ACTIVE' || boardSession.isBotTurnInProgress || !boardSession.aiPlayerUid) {
       if (boardSession) boardSession.isBotTurnInProgress = false; 
@@ -302,8 +324,9 @@ export class MockIgGameCenterApi {
         if (botPiece !== 'E') {
             currentBoardSession.boardMatrixForMockAi[randomMove.r][randomMove.c] = botPiece;
             this.syncBoardMatrixToGameData(sid);
-            this.addEventToBoard(sid, "MOVE", currentBoardSession.aiPlayerUid!, `${randomMove.r}-${randomMove.c}`);
-            this.addEventToBoard(sid, "NOTICE", "0", `${MOCK_BOT_NAME} (Bot) made a move to ${randomMove.r}-${randomMove.c}`);
+            const encodedMove = encodeHexMove(randomMove, currentBoardSession.boardSize);
+            this.addEventToBoard(sid, "MOVE", currentBoardSession.aiPlayerUid!, encodedMove);
+            this.addEventToBoard(sid, "NOTICE", "0", `${MOCK_BOT_NAME} (Bot) made a move to ${encodedMove}`);
 
             currentBotPlayerInfo.active = '0';
             const humanPlayerInfo = currentBoardSession.humanPlayerUid ? currentBoardSession.players.get(currentBoardSession.humanPlayerUid) : undefined;
@@ -315,7 +338,7 @@ export class MockIgGameCenterApi {
                 currentBoardSession.players.forEach(p => p.finished = '1'); 
             }
         } else {
-            if (DEBUG) console.error(`Mock Bot Error: Bot piece could not be determined. Bot place: ${botPlace}`);
+            if (this.verbose) console.error(`Mock Bot Error: Bot piece could not be determined. Bot place: ${botPlace}`);
             this.addEventToBoard(sid, "NOTICE", "0", `${MOCK_BOT_NAME} (Bot) had an issue determining its piece.`);
         }
 
@@ -332,7 +355,7 @@ export class MockIgGameCenterApi {
   }
 
   public async registerUser(params: Omit<IgUserRegistrationParams, 'networkuid'>): Promise<IgApiResponse> {
-    await new Promise(resolve => setTimeout(resolve, 300)); 
+    await this.delay(300);
 
     const { name, password, email } = params;
 
@@ -383,7 +406,7 @@ export class MockIgGameCenterApi {
   }
 
   public async loginUser(params: Omit<IgUserLoginParams, 'networkuid' | 'md5'>): Promise<IgApiResponse> {
-    await new Promise(resolve => setTimeout(resolve, 300)); 
+    await this.delay(300);
 
     const { login, password } = params;
     let user: StoredMockUser | undefined;
@@ -414,7 +437,7 @@ export class MockIgGameCenterApi {
   }
 
   public async getUserProfile(params: IgUserProfileParams): Promise<IgUserProfileData | IgUserRegistrationError> {
-    await new Promise(resolve => setTimeout(resolve, 300)); 
+    await this.delay(300);
 
     const profile = this.profiles.get(params.uid);
     const user = this.users.get(params.uid); 
@@ -461,7 +484,7 @@ export class MockIgGameCenterApi {
   }
 
   public async updateUserProfile(params: IgUserUpdateParams): Promise<IgUserUpdateSuccessResponse | IgUserRegistrationError> {
-    await new Promise(resolve => setTimeout(resolve, 300)); 
+    await this.delay(300);
 
     const user = this.users.get(params.uid);
     const profile = this.profiles.get(params.uid);
@@ -504,7 +527,7 @@ export class MockIgGameCenterApi {
   }
 
   public async joinRandomGame(params: IgJoinRandomGameParams): Promise<IgJoinRandomGameResponse> {
-    await new Promise(resolve => setTimeout(resolve, 500)); 
+    await this.delay(500);
 
     const user = this.users.get(params.uid);
     if (!user || user.sessionId !== params.session_id || (user.sessionExpiry || 0) <= Date.now()) {
@@ -554,7 +577,7 @@ export class MockIgGameCenterApi {
   }
 
   public async createBoardSession(params: IgCreateBoardParams): Promise<IgCreateBoardResponse> {
-    await new Promise(resolve => setTimeout(resolve, 400)); 
+    await this.delay(400);
 
     const user = this.users.get(params.uid);
     if (!user || user.sessionId !== params.session_id || (user.sessionExpiry || 0) <= Date.now()) {
@@ -613,7 +636,7 @@ export class MockIgGameCenterApi {
   }
 
   public async fetchLobby(params: IgLobbyApiParams): Promise<IgLobbyResponse> {
-    await new Promise(resolve => setTimeout(resolve, 300)); 
+    await this.delay(300);
 
     const user = this.users.get(params.uid);
     if (!user || user.sessionId !== params.session_id || (user.sessionExpiry || 0) <= Date.now()) {
@@ -672,7 +695,7 @@ export class MockIgGameCenterApi {
   }
 
   public async handleGameCommand(params: IgCommandHandlerFullParams, serverUrl: string): Promise<IgCommandHandlerResponse> {
-    await new Promise(resolve => setTimeout(resolve, 100 + Math.random() * 200)); 
+    await this.delay(200);
 
     const user = this.users.get(params.uid);
     if (!user || user.sessionId !== params.session_id || (user.sessionExpiry || 0) <= Date.now()) {
@@ -681,8 +704,12 @@ export class MockIgGameCenterApi {
 
     let boardSession = this.mockBoardSessions.get(params.sid);
 
-    if (!boardSession && params.cmd?.toUpperCase() === "JOIN" && params.fromLobby === 'true') {
-        if (DEBUG) console.log(`Mock API: Board session ${params.sid} not found. Creating it for JOIN from lobby.`);
+    if (
+      !boardSession
+      && (!params.cmd || params.cmd.toUpperCase() === "JOIN")
+      && params.fromLobby === 'true'
+    ) {
+        if (this.verbose) console.log(`Mock API: Board session ${params.sid} not found. Creating it for JOIN from lobby.`);
         
         let boardSizeNum = DEFAULT_BOARD_SIZE; 
         if (params.lobbyBoardSize) {
@@ -690,7 +717,7 @@ export class MockIgGameCenterApi {
             if (!isNaN(parsedSize) && parsedSize >=3 && parsedSize <=19) { 
                 boardSizeNum = parsedSize;
             } else {
-                if (DEBUG) console.warn(`Mock API: Invalid lobbyBoardSize '${params.lobbyBoardSize}' received. Defaulting to 11.`);
+                if (this.verbose) console.warn(`Mock API: Invalid lobbyBoardSize '${params.lobbyBoardSize}' received. Defaulting to 11.`);
             }
         }
         
@@ -745,6 +772,20 @@ export class MockIgGameCenterApi {
 
     if (!boardSession) {
       return { error: true, message: "INVALID_BOARD_SESSION_ID" };
+    }
+
+    if (
+      !params.cmd
+      && !boardSession.players.has(params.uid)
+      && !boardSession.guests.has(params.uid)
+    ) {
+      boardSession.guests.set(params.uid, {
+        uid: params.uid,
+        name: user.name || 'Unknown',
+        score: 0,
+      });
+      boardSession.playerPlaces.set(params.uid, '0');
+      this.addEventToBoard(params.sid, 'JOIN', params.uid, user.name);
     }
 
     const requestingUserPlace = boardSession.playerPlaces.get(params.uid) || "0";
@@ -842,23 +883,30 @@ export class MockIgGameCenterApi {
              this.scheduleBotAutoReadyUpIfApplicable(params.sid);
         }
         break;
-      case "MOVE":
+      case "MOVE": {
         const moveData = params.move || ""; 
-        const [rStr, cStr] = moveData.split('-');
-        const r = parseInt(rStr, 10);
-        const c = parseInt(cStr, 10);
+        const decodedMove = decodeHexMove(moveData, boardSession.boardSize);
         const movingPlayerInfo = boardSession.players.get(params.uid);
 
-        if (movingPlayerInfo && movingPlayerInfo.active === '1' &&
+        if (decodedMove?.kind === 'swap' && movingPlayerInfo?.active === '1') {
+            this.addEventToBoard(params.sid, "MOVE", params.uid, 'SWAP');
+            this.addEventToBoard(params.sid, "NOTICE", "0", `${user.name} used the swap rule.`);
+            movingPlayerInfo.active = '0';
+            const otherPlayer = Array.from(boardSession.players.values()).find(player => player.uid !== params.uid);
+            if (otherPlayer) otherPlayer.active = '1';
+        } else if (decodedMove?.kind === 'place' && movingPlayerInfo && movingPlayerInfo.active === '1') {
+          const { r, c } = decodedMove.coordinate;
+          if (
             r >= 0 && r < boardSession.boardSize &&
             c >= 0 && c < boardSession.boardSize &&
-            boardSession.boardMatrixForMockAi[r][c] === '0') { 
+            boardSession.boardMatrixForMockAi[r][c] === '0'
+          ) {
 
             const playerPiece = boardSession.playerPlaces.get(params.uid) === '1' ? '1' : '2';
             boardSession.boardMatrixForMockAi[r][c] = playerPiece;
             this.syncBoardMatrixToGameData(params.sid);
             this.addEventToBoard(params.sid, "MOVE", params.uid, moveData);
-            this.addEventToBoard(params.sid, "NOTICE", "0", `${user.name} made a move to ${r}-${c}`);
+            this.addEventToBoard(params.sid, "NOTICE", "0", `${user.name} made a move to ${moveData}`);
 
             movingPlayerInfo.active = '0';
             if (boardSession.aiPlayerUid) {
@@ -874,18 +922,57 @@ export class MockIgGameCenterApi {
                     if (otherPlayer) otherPlayer.active = '1';
                 }
             }
+          } else {
+            this.addEventToBoard(params.sid, "NOTICE", "0", `Invalid move attempt by ${user.name}.`);
+          }
         } else {
             this.addEventToBoard(params.sid, "NOTICE", "0", `Invalid move attempt by ${user.name}.`);
         }
         break;
+      }
       case "MSG": 
         this.addEventToBoard(params.sid, "MSG", params.uid, params.message);
         break;
       case "PLACE": 
         const newPlace = params.place || "0";
+        if (
+          newPlace !== '0'
+          && Array.from(boardSession.players.values()).some(
+            player => player.uid !== params.uid && player.place === newPlace,
+          )
+        ) {
+          this.addEventToBoard(params.sid, 'NOTICE', '0', `Player place ${newPlace} is occupied.`);
+          break;
+        }
         boardSession.playerPlaces.set(params.uid, newPlace);
-        const playerToUpdate = boardSession.players.get(params.uid);
-        if(playerToUpdate) playerToUpdate.place = newPlace;
+        let playerToUpdate = boardSession.players.get(params.uid);
+        if (newPlace === '0') {
+          if (playerToUpdate) {
+            boardSession.players.delete(params.uid);
+            boardSession.guests.set(params.uid, {
+              uid: params.uid,
+              name: playerToUpdate.name,
+              score: playerToUpdate.score,
+            });
+          }
+        } else if (playerToUpdate) {
+          playerToUpdate.place = newPlace;
+        } else {
+          boardSession.guests.delete(params.uid);
+          playerToUpdate = {
+            uid: params.uid,
+            name: user.name || 'Unknown',
+            sex: user.sex || '-',
+            score: 1500,
+            place: newPlace,
+            stat: PlayerStat.NONE,
+            lastRefresh: Math.floor(Date.now() / 1000),
+            online: '1',
+            active: '0',
+            finished: '0',
+          };
+          boardSession.players.set(params.uid, playerToUpdate);
+        }
         this.addEventToBoard(params.sid, "PLACE", params.uid, newPlace);
         break;
       case "START": 
@@ -933,21 +1020,24 @@ export class MockIgGameCenterApi {
             this.scheduleBotAutoJoinIfApplicable(params.sid);
         }
         break;
-    case "UNDO":
+    case "UNDO": {
         const undoType = params.type; 
-        if (undoType === 'REQUEST') {
-            const targetEid = params.target_eid;
-            if (!targetEid) {
-                this.addEventToBoard(params.sid, "NOTICE", "0", `Undo request from ${user.name} is missing target_eid.`);
+        if (undoType === 'ASK') {
+            const moveIndex = Number.parseInt(params.move_ind || '', 10);
+            if (!Number.isInteger(moveIndex) || moveIndex < 0) {
+                this.addEventToBoard(params.sid, "NOTICE", "0", `Undo request from ${user.name} is missing move_ind.`);
                 break;
             }
-            this.addEventToBoard(params.sid, "UNDO", params.uid, JSON.stringify({ action: "REQUEST", by_uid: params.uid, by_name: user.name, target_eid: targetEid }));
-            this.addEventToBoard(params.sid, "NOTICE", "0", `${user.name} has requested an undo for move EID ${targetEid}.`);
+            boardSession.pendingUndoMoveIndex = moveIndex;
+            this.addEventToBoard(params.sid, "UNDOASK", params.uid, String(moveIndex));
+            this.addEventToBoard(params.sid, "NOTICE", "0", `${user.name} requested undo to move ${moveIndex}.`);
         } else if (undoType === 'ACCEPT') {
-            this.addEventToBoard(params.sid, "UNDO", params.uid, JSON.stringify({ action: "ACCEPT", by_uid: params.uid, by_name: user.name }));
-            this.addEventToBoard(params.sid, "NOTICE", "0", `${user.name} has accepted the undo request.`);
-            
-            if (boardSession.gameData && boardSession.gameData.board) {
+            if (boardSession.pendingUndoMoveIndex === undefined) {
+              this.addEventToBoard(params.sid, "NOTICE", "0", "There is no pending undo request.");
+              break;
+            }
+            const acceptedMoveIndex = boardSession.pendingUndoMoveIndex;
+            if (boardSession.gameData?.board) {
                 const boardStr = boardSession.gameData.board;
                 let lastPieceIndex = -1;
                 for(let i = boardStr.length -1; i >=0; i--) {
@@ -968,15 +1058,56 @@ export class MockIgGameCenterApi {
                 if (nowActivePlayer) this.addEventToBoard(params.sid, "NOTICE", "0", `Board state reverted (mock). It's now ${nowActivePlayer.name}'s turn.`);
 
             }
-
+            this.addEventToBoard(params.sid, "UNDODONE", params.uid, String(acceptedMoveIndex));
+            this.addEventToBoard(params.sid, "NOTICE", "0", `${user.name} accepted the undo request.`);
+            delete boardSession.pendingUndoMoveIndex;
         } else if (undoType === 'DENY') {
-            this.addEventToBoard(params.sid, "UNDO", params.uid, JSON.stringify({ action: "DENY", by_uid: params.uid, by_name: user.name }));
-            this.addEventToBoard(params.sid, "NOTICE", "0", `${user.name} has denied the undo request.`);
+            delete boardSession.pendingUndoMoveIndex;
+            this.addEventToBoard(params.sid, "NOTICE", "0", `${user.name} rejected the undo request.`);
+        } else if (undoType === 'FORBID') {
+            delete boardSession.pendingUndoMoveIndex;
+            this.addEventToBoard(params.sid, "NOTICE", "0", `${user.name} forbids further undo requests.`);
         }
         break;
+    }
+    case "RESTART": {
+        const newSid = this.generateBoardSid();
+        const newBoardMatrix = Array(boardSession.boardSize).fill(null)
+          .map(() => Array(boardSession.boardSize).fill('0'));
+        const restartedPlayers = new Map<string, IgPlayerInfo>();
+        boardSession.players.forEach(player => {
+          restartedPlayers.set(player.uid, {
+            ...player,
+            stat: PlayerStat.NONE,
+            active: '0',
+            finished: '0',
+          });
+        });
+        this.mockBoardSessions.set(newSid, {
+          sid: newSid,
+          ownerUid: params.uid,
+          ownerName: user.name || boardSession.ownerName,
+          gameStatus: 'INIT',
+          players: restartedPlayers,
+          guests: new Map(),
+          events: [],
+          gameData: { board: newBoardMatrix.flat().join('') },
+          gameOptions: { ...boardSession.gameOptions },
+          lastEventIdCounter: 0,
+          playerPlaces: new Map(boardSession.playerPlaces),
+          boardMatrixForMockAi: newBoardMatrix,
+          boardSize: boardSession.boardSize,
+          aiPlayerUid: boardSession.aiPlayerUid,
+          humanPlayerUid: boardSession.humanPlayerUid,
+          isBotTurnInProgress: false,
+        });
+        this.addEventToBoard(newSid, "NOTICE", "0", `Rematch created by ${user.name}.`);
+        this.addEventToBoard(params.sid, "RESTART", params.uid, newSid);
+        break;
+    }
 
       default:
-        if (DEBUG) console.warn(`Mock API: Unhandled command '${params.cmd}' for SID ${params.sid}`);
+        if (params.cmd && this.verbose) console.warn(`Mock API: Unhandled command '${params.cmd}' for SID ${params.sid}`);
     }
 
     const sessionInfo: IgSessionInfo = {
