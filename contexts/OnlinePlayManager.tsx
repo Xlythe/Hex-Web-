@@ -58,6 +58,12 @@ import {
 } from '../server/igGameCenterProtocol';
 import { useAuth } from '../hooks/useAuth';
 import { useGameSession } from '../hooks/useGameSession';
+import {
+  appendChatMessage,
+  markChatDelivery,
+  normalizeChatText,
+  reconcileChatEvent,
+} from '../chatMessages';
 
 const NOTIFICATION_ICON_URL = 'https://xlythe.com/images/favicon.ico'; // Ensure this is accessible
 
@@ -207,52 +213,11 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
     const sender = allPlayers.find(p => p.uid === event.uid);
     const senderName = sender?.name || `User (${event.uid.substring(0, 4)})`;
     const isLocalUserMessage = event.uid === loggedInUser?.uid;
-    const trimmedEventText = event.data!.trim();
+    const trimmedEventText = normalizeChatText(event.data);
 
-    setChatMessages(prevMessages => {
-      let newMessagesArray = [...prevMessages];
-      let messageUpdated = false;
-
-      if (isLocalUserMessage) {
-        const optimisticMessageIndex = newMessagesArray.findIndex(
-          msg => msg.localId && msg.text === trimmedEventText && msg.status === 'sending'
-        );
-
-        if (optimisticMessageIndex !== -1) {
-          newMessagesArray[optimisticMessageIndex] = {
-            ...newMessagesArray[optimisticMessageIndex],
-            id: event.eid,
-            serverTimestamp: event.stamp,
-            status: 'sent',
-            localId: undefined,
-          };
-          messageUpdated = true;
-        }
-      }
-
-      if (!messageUpdated) {
-        if (!newMessagesArray.some(msg => msg.id === event.eid)) {
-          const newMessageFromServer: ChatMessage = {
-            id: event.eid,
-            senderUid: event.uid,
-            senderName: senderName,
-            text: trimmedEventText,
-            initialTimestamp: event.stamp,
-            serverTimestamp: event.stamp,
-            isLocalPlayer: isLocalUserMessage,
-            status: 'sent',
-          };
-          newMessagesArray.push(newMessageFromServer);
-        } else {
-          newMessagesArray = newMessagesArray.map(msg =>
-            msg.id === event.eid
-              ? { ...msg, status: 'sent', serverTimestamp: Math.max(msg.serverTimestamp || 0, event.stamp), text: trimmedEventText, senderName: senderName }
-              : msg
-          );
-        }
-      }
-      return newMessagesArray.sort((a, b) => (a.initialTimestamp || 0) - (b.initialTimestamp || 0));
-    });
+    setChatMessages(previous =>
+      reconcileChatEvent(previous, event, senderName, loggedInUser?.uid || null)
+    );
 
     if (!isLocalUserMessage) {
       showNotification(senderName, trimmedEventText, `hex-chat-${event.uid}`, true);
@@ -901,7 +866,7 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
 
   const sendChatMessage = useCallback(async (messageText: string) => {
     if (!loggedInUser || !onlineGameSessionId || !gameController?.onlineOpponent) return;
-    const trimmedMessageText = messageText.trim();
+    const trimmedMessageText = normalizeChatText(messageText);
     if (!trimmedMessageText) return;
 
     const nowSeconds = Math.floor(Date.now() / 1000);
@@ -911,18 +876,19 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
       text: trimmedMessageText, initialTimestamp: nowSeconds, serverTimestamp: nowSeconds,
       isLocalPlayer: true, status: 'sending',
     };
-    setChatMessages(prev => [...prev, optimisticMessage].sort((a,b) => (a.initialTimestamp || 0) - (b.initialTimestamp || 0)));
+    setChatMessages(previous => appendChatMessage(previous, optimisticMessage));
 
     try {
       const response = await gameController.onlineOpponent.sendCommand('MSG', loggedInUser, { message: trimmedMessageText });
       if (response.error) {
-        setChatMessages(prev => prev.map(msg => msg.localId === tempId ? { ...msg, status: 'failed' } : msg));
+        setChatMessages(previous => markChatDelivery(previous, tempId, 'failed'));
       } else {
         processEventsFromResponse(response, onlineGameSessionId);
+        setChatMessages(previous => markChatDelivery(previous, tempId, 'sent'));
       }
     } catch (err: any) {
       console.error("OnlinePlayManager: Chat send exception:", err);
-      setChatMessages(prev => prev.map(msg => msg.localId === tempId ? { ...msg, status: 'failed' } : msg));
+      setChatMessages(previous => markChatDelivery(previous, tempId, 'failed'));
     }
   }, [loggedInUser, onlineGameSessionId, gameController, processEventsFromResponse]);
 

@@ -152,7 +152,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       </div>
 
       {/* Message Area */}
-      <div className="flex-grow p-3 overflow-y-auto space-y-2 scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent">
+      <div
+        className="flex-grow p-3 overflow-y-auto space-y-2 scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent"
+        aria-live="polite"
+        aria-label="Chat messages"
+      >
+        {messages.length === 0 && (
+          <div className="h-full flex items-center justify-center px-8 text-center text-sm text-gray-500 dark:text-gray-400">
+            No messages yet. Say hello or wish your opponent good luck.
+          </div>
+        )}
         {messages.map((msg) => {
           const isSystemMessage = msg.senderUid === SYSTEM_SENDER_UID;
           return (
@@ -206,11 +215,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           maxLength={200}
         />
         <button type="submit" className={primaryButtonClasses} disabled={isLoading || !currentMessage.trim()}>
-          {isLoading && messages.some(m => m.status === 'sending' && m.isLocalPlayer && m.text === currentMessage.trim()) ? (
-            <SpinnerIcon className="animate-spin h-4 w-4 text-white" />
-          ) : (
-            <SendIcon className="w-5 h-5" />
-          )}
+          <SendIcon className="w-5 h-5" />
+          <span className="sr-only">Send message</span>
         </button>
       </form>
     </div>
