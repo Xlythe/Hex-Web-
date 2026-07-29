@@ -53,6 +53,7 @@ import {
   createUndoCommandParams,
   decodeHexMove,
   IGGC_POLL_INTERVAL_MS,
+  nextPollDelayMs,
   parseLegacyUndoEvent,
   parseRestartSessionId,
 } from '../server/igGameCenterProtocol';
@@ -123,6 +124,8 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
   });
   const previousActivePlayerUidRef = useRef<string | null | undefined>(null);
   const _handleRematchEventCallbackRef = useRef<((event: IgGameEvent) => void) | null>(null);
+  const pollInFlightRef = useRef(false);
+  const lastPollStartedAtRef = useRef(0);
 
   const showNotification = useCallback((title: string, body: string, tag?: string, isOpponentAction: boolean = true) => {
     if (
@@ -1249,6 +1252,9 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
         if (DEBUG) console.log("OnlinePlayManager: Skipping REFRESH poll due to ongoing online action (isOnlineActionLoading=true).");
         return;
       }
+      if (pollInFlightRef.current) return;
+      pollInFlightRef.current = true;
+      lastPollStartedAtRef.current = Date.now();
 
       try {
         const response = await gameController.onlineOpponent.sendCommand('REFRESH', loggedInUser, {
@@ -1340,10 +1346,21 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
                  sessionInfo: null, playerList: [], gameOptions: null, isCurrentUserHost: false, isLoading: false, error: err.message
             });
           }
+      } finally {
+        pollInFlightRef.current = false;
       }
     };
 
     const runPoll = async () => {
+      const remainingDelay = nextPollDelayMs(
+        Date.now(),
+        lastPollStartedAtRef.current,
+        pollInterval,
+      );
+      if (remainingDelay > 0) {
+        timeoutId = window.setTimeout(runPoll, remainingDelay);
+        return;
+      }
       await fetchData();
       if (!cancelled) {
         timeoutId = window.setTimeout(runPoll, pollInterval);
@@ -1363,7 +1380,6 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
     currentDisplayState.gamePhase, currentDisplayState.isOnlineOpponent,
     startGameFromGameSession,
     undoRequestState, isAwaitingUndoBoardReset,
-    onlineGameStatusMessage,
     rematchOfferState, addSystemChatMessage
   ]);
 

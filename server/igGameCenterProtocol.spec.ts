@@ -5,6 +5,7 @@ import {
   encodeHexMove,
   IGGC_POLL_INTERVAL_MS,
   isValidServerName,
+  nextPollDelayMs,
   parseLegacyUndoEvent,
   parseRestartSessionId,
 } from './igGameCenterProtocol';
@@ -68,5 +69,12 @@ describe('legacy Android igGameCenter protocol', () => {
     expect(isValidServerName('gc1')).toBe(true);
     expect(isValidServerName('../other')).toBe(false);
     expect(isValidServerName('gc1.example.com')).toBe(false);
+  });
+
+  it('preserves the minimum poll interval across React effect restarts', () => {
+    expect(nextPollDelayMs(1_000, 0)).toBe(0);
+    expect(nextPollDelayMs(5_000, 1_000)).toBe(11_000);
+    expect(nextPollDelayMs(16_000, 1_000)).toBe(0);
+    expect(nextPollDelayMs(17_000, 1_000)).toBe(0);
   });
 });

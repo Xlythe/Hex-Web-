@@ -8,6 +8,16 @@ const HEX_COLUMNS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 export const IGGC_POLL_INTERVAL_MS = 15_000;
 
+/** Remaining delay required before another poll may begin. */
+export const nextPollDelayMs = (
+  nowMillis: number,
+  lastPollStartedMillis: number,
+  intervalMillis: number = IGGC_POLL_INTERVAL_MS,
+): number => {
+  if (lastPollStartedMillis <= 0) return 0;
+  return Math.max(0, intervalMillis - (nowMillis - lastPollStartedMillis));
+};
+
 export type HexWireMove =
   | { kind: 'place'; coordinate: Coordinate }
   | { kind: 'swap' };
