@@ -2,8 +2,8 @@
 // Basic test structure for ReplayService.ts
 import { ReplayService, ReplaySnapshot } from './ReplayService';
 import { CompletedGameEntry, Player, GamePhase, WinReason, HistoryEntry } from './types';
-import { DEFAULT_PLAYER_1_PROFILE_BASE, DEFAULT_PLAYER_2_PROFILE_BASE, DEFAULT_TIMER_SETTINGS } from './Constants';
-import { describe, expect, it } from 'vitest';
+import { DEFAULT_PLAYER_1_PROFILE_BASE, DEFAULT_PLAYER_2_PROFILE_BASE, DEFAULT_TIMER_SETTINGS, REPLAY_STEP_DELAY_MS } from './Constants';
+import { describe, expect, it, vi } from 'vitest';
 
 /**
  * @file ReplayService.test.ts
@@ -105,8 +105,11 @@ function testReplayScenario(gameToTest: CompletedGameEntry, description: string)
     replayService.startReplay(gameToTest);
     const initialSnapshot = currentSnapshot();
 
+    const expectedInitialStep = gameToTest.history.findIndex(entry =>
+      entry.turnCount > 0 || entry.boardMatrix.some(row => row.some(cell => cell !== null))
+    );
     // Initial checks after startReplay
-    if (!replayService.isActive || !initialSnapshot || initialSnapshot.currentStepIndex !== -1 || updateCount === 0) {
+    if (!replayService.isActive || !initialSnapshot || initialSnapshot.currentStepIndex !== expectedInitialStep || updateCount === 0) {
         console.error(`Test FAILED (${description}): startReplay did not initialize correctly. Active: ${replayService.isActive}, Snapshot Step: ${initialSnapshot?.currentStepIndex}, Updates: ${updateCount}`);
         allTestsPassed = false;
         return;
@@ -122,8 +125,8 @@ function testReplayScenario(gameToTest: CompletedGameEntry, description: string)
     }
 
     let scenarioPassed = true;
-    // Manually step through each history entry
-    for (let i = 0; i < gameToTest.history.length; i++) {
+    // Manually step through each remaining history entry.
+    for (let i = initialSnapshot.currentStepIndex + 1; i < gameToTest.history.length; i++) {
         if (!replayService.isActive) {
             console.error(`Test FAILED (${description}): Replay became inactive prematurely at target step index ${i} (snapshot index ${currentSnapshot()?.currentStepIndex}).`);
             allTestsPassed = false; scenarioPassed = false; break;
@@ -218,5 +221,45 @@ if (allTestsPassed) {
   console.error('Some ReplayService.ts tests FAILED (manual stepping with scenarios).');
 }
 expect(allTestsPassed).toBe(true);
+});
+
+it('shows the first real move immediately and keeps later moves paced', () => {
+  vi.useFakeTimers();
+  const snapshots: ReplaySnapshot[] = [];
+  const replayService = new ReplayService(snapshot => {
+    if (snapshot) snapshots.push(snapshot);
+  });
+  const game: CompletedGameEntry = {
+    id: 'first-move-no-delay',
+    timestamp: 1,
+    durationSeconds: 2,
+    settings: { boardSize: 2, timerSettings: { ...DEFAULT_TIMER_SETTINGS, mode: 'off' }, swapRuleEnabled: true },
+    player1Profile: { ...DEFAULT_PLAYER_1_PROFILE_BASE },
+    player2Profile: { ...DEFAULT_PLAYER_2_PROFILE_BASE },
+    wasPlayer1ProfileAssignedToSideONE_atGameStart: true,
+    finalWinnerPlayerColor: Player.ONE,
+    winReason: 'connection',
+    finalWinningPath: [{ r: 0, c: 0 }, { r: 1, c: 0 }],
+    wasPlayerRolesSwappedAtGameEnd: false,
+    history: [
+      { boardMatrix: [[null, null], [null, null]], currentPlayer: Player.ONE, turnCount: 0, firstGameMove: null, isPlayerRolesSwapped: false, currentTurnTimeLeft: null, playerGameTimeLeft: null, winningPath: null },
+      { boardMatrix: [[Player.ONE, null], [null, null]], currentPlayer: Player.TWO, turnCount: 1, firstGameMove: { coord: { r: 0, c: 0 }, player: Player.ONE }, isPlayerRolesSwapped: false, currentTurnTimeLeft: null, playerGameTimeLeft: null, winningPath: null },
+      { boardMatrix: [[Player.ONE, null], [Player.TWO, null]], currentPlayer: Player.ONE, turnCount: 2, firstGameMove: { coord: { r: 0, c: 0 }, player: Player.ONE }, isPlayerRolesSwapped: false, currentTurnTimeLeft: null, playerGameTimeLeft: null, winningPath: null },
+    ],
+  };
+
+  replayService.startReplay(game);
+
+  expect(snapshots).toHaveLength(1);
+  expect(snapshots[0].currentStepIndex).toBe(1);
+  expect(snapshots[0].boardMatrix[0][0]).toBe(Player.ONE);
+
+  vi.advanceTimersByTime(REPLAY_STEP_DELAY_MS - 1);
+  expect(snapshots).toHaveLength(1);
+  vi.advanceTimersByTime(1);
+  expect(snapshots.at(-1)?.currentStepIndex).toBe(2);
+
+  replayService.dispose();
+  vi.useRealTimers();
 });
 });

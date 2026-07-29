@@ -98,13 +98,22 @@ export class ReplayService {
     this.stopReplayInternal(false); // Stop any current replay without immediate notification
     
     this.gameToReplay = game;
-    this.currentStepIndex = -1; // Start before the first history entry (shows initial empty board)
+    // History records the state before each move, so completed games normally
+    // begin with an empty-board entry followed by the first placed stone. Do not
+    // make the player watch that redundant empty state: begin at the first
+    // history entry that represents a move.
+    const firstMoveIndex = game.history.findIndex(entry =>
+      entry.turnCount > 0 || entry.boardMatrix.some(row => row.some(cell => cell !== null))
+    );
+    this.currentStepIndex = firstMoveIndex >= 0
+      ? firstMoveIndex
+      : (game.history.length > 0 ? 0 : -1);
     this._isActive = true;
 
-    const initialSnapshot = this.createSnapshot(); // Create snapshot for the "before game starts" state
+    const initialSnapshot = this.createSnapshot();
     this.onUpdateCallback(initialSnapshot); 
     
-    this.scheduleNextStep(); // Schedule the first actual move/history entry
+    this.scheduleNextStep();
   }
 
   /**
@@ -147,8 +156,8 @@ export class ReplayService {
    * @private
    * @method scheduleNextStep
    * @description Schedules the `playNextStep` method to be called after a delay.
-   * The delay is typically `REPLAY_STEP_DELAY_MS`, but can be shorter for the very
-   * first step if it's just showing an empty board.
+   * The delay is `REPLAY_STEP_DELAY_MS`; `startReplay` has already skipped any
+   * redundant empty-board entry.
    */
   private scheduleNextStep(): void {
     if (!this._isActive || !this.gameToReplay) {
@@ -161,20 +170,9 @@ export class ReplayService {
 
     if (this.replayIntervalId) clearTimeout(this.replayIntervalId); // Clear existing timer
     
-    let delay = REPLAY_STEP_DELAY_MS;
-    // Special short delay for the initial "empty board" state if the first history entry represents turn 0 on an empty board.
-    if (this.currentStepIndex === -1 && this.gameToReplay.history.length > 0) {
-        const firstHistoryEntry = this.gameToReplay.history[0];
-        // Check if first history entry is an empty board at turn 0
-        if (firstHistoryEntry.turnCount === 0 && 
-            (firstHistoryEntry.boardMatrix.every(row => row.every(cell => cell === null)))) {
-            delay = 50; // Very short delay to quickly move past the initial empty state display
-        }
-    }
-
     this.replayIntervalId = setTimeout(() => {
       this.playNextStep();
-    }, delay) as unknown as number;
+    }, REPLAY_STEP_DELAY_MS) as unknown as number;
   }
 
   /**
