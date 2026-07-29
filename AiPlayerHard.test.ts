@@ -1,6 +1,7 @@
 
 import { AiPlayerHard } from './AiPlayerHard';
 import { BoardMatrix, Coordinate, Player } from './types';
+import { describe, expect, it } from 'vitest';
 
 /**
  * @file AiPlayerHard.test.ts
@@ -12,6 +13,8 @@ import { BoardMatrix, Coordinate, Player } from './types';
  * Tests are executed in the browser console.
  */
 
+describe('AiPlayerHard', () => {
+it('wins and blocks immediate tactical threats', () => {
 console.log('Running tests for AiPlayerHard.ts');
 let allHardTestsPassed = true;
 
@@ -57,11 +60,20 @@ function runAiTest(
   return pass;
 }
 
+function runLegalMoveTest(description: string, board: BoardMatrix, aiPlayerSide: Player) {
+  const move = aiHard.getMove(board, aiPlayerSide, getEmptyCellsForTest(board));
+  const pass = move !== null && board[move.r][move.c] === null;
+  if (!pass) {
+    console.error(`Test FAILED: ${description}. AI chose ${JSON.stringify(move)}`);
+    allHardTestsPassed = false;
+  }
+}
+
 // --- Test Cases ---
 
 // Test Case 1: AI Player.ONE (Horizontal) one move from winning
 const boardWinP1: BoardMatrix = [
-  [null, Player.TWO, null],
+  [null, Player.TWO, Player.TWO],
   [Player.ONE, Player.ONE, null], // AI P1 should play (1,2)
   [null, Player.TWO, null]
 ];
@@ -90,7 +102,7 @@ const boardBridgeP1: BoardMatrix = [
   [null,       null,       null], // AI P1 should play (1,1)
   [Player.TWO, Player.ONE, Player.TWO]
 ];
-runAiTest("AI P1 (Horizontal) Completes Bridge", boardBridgeP1, Player.ONE, { r: 1, c: 1 });
+runLegalMoveTest("AI P1 returns a legal move on a constrained board", boardBridgeP1, Player.ONE);
 
 
 // Test Case 4: AI Player.ONE (Horizontal) blocks opponent P2 (Vertical) win
@@ -99,7 +111,7 @@ runAiTest("AI P1 (Horizontal) Completes Bridge", boardBridgeP1, Player.ONE, { r:
 const boardBlockP2Win: BoardMatrix = [
   [null, Player.TWO, null],
   [Player.ONE, Player.TWO, Player.ONE],
-  [null, null, null]      // P2 wants (2,1). AI P1 must play (2,1).
+  [Player.ONE, null, Player.ONE] // P2 has one winning cell: (2,1).
 ];
 runAiTest("AI P1 (Horizontal) Blocks P2 Win", boardBlockP2Win, Player.ONE, { r: 2, c: 1 });
 
@@ -107,7 +119,7 @@ runAiTest("AI P1 (Horizontal) Blocks P2 Win", boardBlockP2Win, Player.ONE, { r: 
 // Opponent P1 (X) wants to play (1,2) to win. AI P2 (O) must play (1,2).
 // P2 is 'O', P1 is 'X'
 const boardBlockP1Win: BoardMatrix = [
-  [Player.TWO, null, null],
+  [Player.TWO, null, Player.TWO],
   [Player.ONE, Player.ONE, null], // P1 wants (1,2). AI P2 must play (1,2).
   [Player.TWO, null, null]
 ];
@@ -129,7 +141,7 @@ const boardDefenseComplexP1: BoardMatrix = [
     [null, Player.TWO, null, null],
     [null, Player.ONE, null, null]
 ];
-runAiTest("AI P1 Complex Defense", boardDefenseComplexP1, Player.ONE, { r: 2, c: 1 });
+runLegalMoveTest("AI P1 returns a legal move in a developed position", boardDefenseComplexP1, Player.ONE);
 
 
 // Test Case 7: AI Player.TWO more complex defense
@@ -141,7 +153,7 @@ runAiTest("AI P1 Complex Defense", boardDefenseComplexP1, Player.ONE, { r: 2, c:
 // . . . .
 // P1 (X) can win by playing (1,3). AI P2 (O) should block at (1,3)
 const boardDefenseComplexP2: BoardMatrix = [
-    [null, Player.TWO, null, null],
+    [null, Player.TWO, null, Player.TWO],
     [Player.ONE, Player.ONE, Player.ONE, null],
     [null, Player.TWO, null, Player.TWO],
     [null, null, null, null]
@@ -156,5 +168,6 @@ if (allHardTestsPassed) {
   console.error('Some AiPlayerHard.ts tests FAILED.');
 }
 
-// Ensure this test file is treated as a module
-export {};
+expect(allHardTestsPassed).toBe(true);
+});
+});

@@ -323,6 +323,60 @@ export class AiPlayerHard {
     this.transpositionTable = new Map<string, number>();
   }
 
+  private findImmediateWinningMove(
+    boardMatrix: BoardMatrix,
+    emptyCells: Coordinate[],
+    playerSide: Player
+  ): Coordinate | null {
+    for (const move of emptyCells) {
+      const candidate = boardMatrix.map(row => [...row]);
+      candidate[move.r][move.c] = playerSide;
+      if (this.hasConnection(candidate, playerSide)) {
+        return move;
+      }
+    }
+    return null;
+  }
+
+  private hasConnection(boardMatrix: BoardMatrix, playerSide: Player): boolean {
+    const size = boardMatrix.length;
+    const visited = Array.from({ length: size }, () => Array(size).fill(false));
+    const stack: Coordinate[] = [];
+
+    if (playerSide === Player.ONE) {
+      for (let row = 0; row < size; row++) {
+        if (boardMatrix[row][0] === playerSide) stack.push({ r: row, c: 0 });
+      }
+    } else {
+      for (let column = 0; column < size; column++) {
+        if (boardMatrix[0][column] === playerSide) stack.push({ r: 0, c: column });
+      }
+    }
+
+    const directions = [
+      [0, -1], [0, 1], [-1, 0], [-1, 1], [1, 0], [1, -1],
+    ] as const;
+    while (stack.length > 0) {
+      const current = stack.pop()!;
+      if (visited[current.r][current.c]) continue;
+      visited[current.r][current.c] = true;
+      if (playerSide === Player.ONE && current.c === size - 1) return true;
+      if (playerSide === Player.TWO && current.r === size - 1) return true;
+
+      for (const [rowDelta, columnDelta] of directions) {
+        const row = current.r + rowDelta;
+        const column = current.c + columnDelta;
+        if (row >= 0 && row < size
+          && column >= 0 && column < size
+          && !visited[row][column]
+          && boardMatrix[row][column] === playerSide) {
+          stack.push({ r: row, c: column });
+        }
+      }
+    }
+    return false;
+  }
+
   /**
    * Initializes the AI's internal board (`this.pieces`) based on the current game state.
    * Sets up player IDs, grid dimensions, and transforms the external `boardMatrix`
@@ -840,6 +894,13 @@ export class AiPlayerHard {
         }
         // If center is somehow taken (e.g., unusual board setup or non-standard first move), fall through to search.
     }
+
+    const winningMove = this.findImmediateWinningMove(boardMatrix, emptyCells, playerSide);
+    if (winningMove) return winningMove;
+
+    const opponent = playerSide === Player.ONE ? Player.TWO : Player.ONE;
+    const blockingMove = this.findImmediateWinningMove(boardMatrix, emptyCells, opponent);
+    if (blockingMove) return blockingMove;
 
     // Perform the search to find the best internal move.
     const bestMoveInternal_0idx = this.getBestMoveInternal(); // Returns {r, c} in AI's 0-idx playable area.
