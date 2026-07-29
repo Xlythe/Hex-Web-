@@ -79,6 +79,18 @@ pnpm test
 pnpm test:coverage
 ```
 
+Visual regression coverage uses Playwright and the deterministic development
+server:
+
+```bash
+pnpm exec playwright install chrome
+pnpm test:screenshots
+```
+
+Use `pnpm test:screenshots:update` only after reviewing an intentional UI
+change. Golden images are stored below `e2e/__screenshots__` and are separated
+by browser and operating system because font rendering is platform-specific.
+
 Run the complete local quality gate—ESLint with zero warnings, TypeScript,
 tests, and the production build—with:
 
