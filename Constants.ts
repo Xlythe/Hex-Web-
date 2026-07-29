@@ -10,9 +10,11 @@ import { PlayerProfile, TimerSettings, TimerMode, PlayerControlType, AiDifficult
 /**
  * @const DEBUG
  * @description If true, the application will use mock APIs and services instead of live ones.
- * Defaults to true for development. Set to false for production builds or live API testing.
+ * Development builds use the deterministic mock by default. Production builds
+ * use the live API unless VITE_USE_MOCK_API=true is explicitly configured.
  */
-export const DEBUG = true;
+export const DEBUG = import.meta.env.VITE_USE_MOCK_API === 'true'
+  || (import.meta.env.DEV && import.meta.env.VITE_USE_REAL_API !== 'true');
 
 /**
  * @const COLOR_PALETTE
