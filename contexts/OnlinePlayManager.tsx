@@ -66,6 +66,7 @@ import {
   normalizeChatText,
   reconcileChatEvent,
 } from '../chatMessages';
+import { publicLobbySessions } from '../server/lobbyVisibility';
 
 const NOTIFICATION_ICON_URL = 'https://xlythe.com/images/favicon.ico'; // Ensure this is accessible
 
@@ -823,7 +824,9 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
         uid: loggedInUser.uid, session_id: loggedInUser.session_id, gid: HEX_GID,
       });
       if (response.error) throw new Error((response as IgUserRegistrationError).message);
-      setLobbyGames((response as IgLobbySuccessResponse).sessions);
+      setLobbyGames(publicLobbySessions(
+        (response as IgLobbySuccessResponse).sessions,
+      ));
     } catch (err: any) {
       setLobbyError(err.message); setLobbyGames(null);
     } finally {
