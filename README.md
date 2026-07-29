@@ -46,54 +46,45 @@ This application is built with React and TypeScript, styled with Tailwind CSS, a
 
 ### Prerequisites
 
-- A modern Web Browser (e.g., Chrome, Firefox, Safari, Edge).
-- A local HTTP server. This is necessary because the game uses ES6 modules (`type="module"` in script tags), which require files to be served over HTTP/HTTPS for security reasons (CORS).
-  - Some common options for a simple local server:
-    - **Python 3:** `python -m http.server 8000` (or `python3 -m http.server 8000`)
-    - **Node.js (with `serve` package):** `npx serve .` (run `npm install -g serve` first if you don't have `npx` or want it globally)
-    - **VS Code:** Extensions like "Live Server" can serve the `index.html` file.
+- Node.js 22.12 or newer.
+- pnpm 11.
+- A modern browser.
 
 ### Setup & Running
 
-1.  **Obtain the Files:**
-    Clone the repository or download the project files (`index.html`, `index.tsx`, `App.tsx`, `components/`, `logic/`, `types.ts`, `Constants.ts`, `utils.ts`, etc.) to a local directory.
+```bash
+pnpm install
+pnpm dev
+```
 
-2.  **Navigate to the Project Directory:**
-    Open your terminal or command prompt and change to the directory where you saved the project files.
-    ```bash
-    cd path/to/your/hex-game-directory
-    ```
-
-3.  **Start a Local HTTP Server:**
-    Using one of the methods mentioned in Prerequisites. For example, with Python:
-    ```bash
-    python -m http.server 8000
-    ```
-    This will typically start serving files from the current directory on port 8000.
-
-4.  **Open the Game in Your Browser:**
-    Open your web browser and navigate to `http://localhost:8000` (or the appropriate URL and port if your server uses a different one). `index.html` should load, and the game application will start.
+Open `http://localhost:3000`. Use `pnpm build` and `pnpm preview` to test
+the production bundle.
 
 ### Note on API Keys & Online Play
 
--   **igGameCenter Integration:** This application integrates with igGameCenter for online multiplayer functionality. The necessary `APP_ID` and `APP_CODE` for igGameCenter are hardcoded within the `IgGameCenterApi.ts` file. For the mock API (used if `DEBUG` is true in `Constants.ts`), these are not strictly used for external calls but are present. For live igGameCenter functionality, ensure these constants are correctly configured for your target igGameCenter application.
+- Production builds use the live igGameCenter adapter through the configured
+  HTTPS proxy. Development builds use the deterministic in-memory server by
+  default.
+- Set `VITE_USE_REAL_API=true` to exercise the live service during development,
+  or `VITE_USE_MOCK_API=true` to force the mock in another build mode.
+- Set `VITE_IGGC_API_BASE_URL` to override the proxy URL. The browser must not
+  send legacy credentials over plain HTTP.
 
 ## Running Tests
 
-The project includes several test files (e.g., `Constants.test.ts`, `utils.test.ts`, `GameController.test.ts`) that are designed to run directly in the browser's developer console. These tests perform basic checks on core game logic components and constants.
+Vitest runs both `*.spec.ts(x)` and the older `*.test.ts(x)` suites:
 
-The tests are structured to be imported by their corresponding source files (e.g., `GameController.ts` imports `GameController.test.ts`). This means the tests automatically execute when the application modules are loaded in the browser.
+```bash
+pnpm test
+pnpm test:coverage
+```
 
-To run and observe the tests:
+Run the complete local quality gate—ESLint with zero warnings, TypeScript,
+tests, and the production build—with:
 
-1.  **Ensure the application is running locally** by following the "Local Deployment" steps above.
-2.  **Open the game in your web browser** (e.g., `http://localhost:8000`).
-3.  **Open your browser's Developer Console.**
-    *   Typically, you can do this by right-clicking on the page, selecting "Inspect" or "Inspect Element," and then navigating to the "Console" tab.
-    *   Alternatively, use keyboard shortcuts (e.g., `Ctrl+Shift+J` or `Cmd+Option+J` on Chrome/Edge, `Ctrl+Shift+K` or `Cmd+Option+K` on Firefox).
-4.  **Observe the console output.** As the application loads its modules, the imported test files will execute. You should see messages indicating "Test PASSED" or "Test FAILED" for various test suites and individual test cases. A summary message at the end of each test file's output will indicate if all tests within that file passed or if some failed.
-
-This setup allows for quick, in-browser checks of the component logic without requiring a separate test runner environment.
+```bash
+pnpm check
+```
 
 ## License
 
