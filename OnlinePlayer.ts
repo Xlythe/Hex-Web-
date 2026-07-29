@@ -10,6 +10,7 @@ import { APP_ID, APP_CODE } from './IgGameCenterApi';
  */
 export class OnlinePlayer {
   private name: string;
+  private commandQueue: Promise<void> = Promise.resolve();
   public sid: string | null = null;
   public server: string | null = null; // This will store just the server name, e.g., "gc1"
   public lastEventId: string = "0"; // ID of the last event received for this board session
@@ -31,7 +32,6 @@ export class OnlinePlayer {
     this.sid = sid;
     this.server = server; // Store just the server name
     this.lastEventId = "0"; // Reset lastEventId for a new session
-    console.log(`OnlinePlayer session set: SID=${sid}, Server Name=${server}`);
   }
 
   /**
@@ -41,7 +41,6 @@ export class OnlinePlayer {
     this.sid = null;
     this.server = null;
     this.lastEventId = "0";
-    console.log("OnlinePlayer session cleared.");
   }
 
   /**
@@ -52,7 +51,19 @@ export class OnlinePlayer {
    * @returns A promise resolving to the parsed server response.
    */
   public async sendCommand(
-    command: string,
+    command: string | null,
+    loggedInUser: LoggedInUser,
+    additionalParams?: Record<string, string>
+  ): Promise<IgCommandHandlerResponse> {
+    const queuedCommand = this.commandQueue.then(() =>
+      this.executeCommand(command, loggedInUser, additionalParams)
+    );
+    this.commandQueue = queuedCommand.then(() => undefined, () => undefined);
+    return queuedCommand;
+  }
+
+  private async executeCommand(
+    command: string | null,
     loggedInUser: LoggedInUser,
     additionalParams?: Record<string, string>
   ): Promise<IgCommandHandlerResponse> {
@@ -71,10 +82,11 @@ export class OnlinePlayer {
       uid: loggedInUser.uid,
       session_id: loggedInUser.session_id,
       sid: this.sid,
-      cmd: command,
-      lasteid: this.lastEventId,
       ...additionalParams,
+      // Resolve this at execution time so queued commands never send a stale EID.
+      lasteid: this.lastEventId,
     };
+    if (command) commandParams.cmd = command;
 
     const response = await api.handleGameCommand(commandParams, this.server);
 

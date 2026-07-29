@@ -497,7 +497,7 @@ export interface IgCommandHandlerParamsBase {
  * This is used as the input type for the `handleGameCommand` method.
  */
 export interface IgCommandHandlerFullParams extends IgCommandHandlerParamsBase {
-  cmd: string;             // The command to execute (e.g., "JOIN", "MOVE", "REMATCH")
+  cmd?: string;            // Omitted for the initial board-session handshake
   lasteid?: string;        // ID of the last event received in a previous call
   // Allows for additional command-specific parameters like 'place', 'move', 'message', 'type' for REMATCH/UNDO, 'move_ind' for UNDO
   [key: string]: string | undefined;
@@ -908,6 +908,7 @@ export enum RematchOfferState {
 export interface OpponentRematchOfferDetails {
   offeringPlayerUid: string;
   offeringPlayerName: string;
+  newSessionId: string;
 }
 
 // --- AuthContextType Definition ---

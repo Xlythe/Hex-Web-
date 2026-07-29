@@ -35,9 +35,6 @@ import {
   WaitingRoomStateData,
   WaitingRoomGameSetupParams,
   CustomGameSettings,
-  // Undo related types
-  UndoEventData,
-  UndoEventAction,
   UndoRequestState,
   OpponentUndoRequestDetails,
   // Rematch related types
@@ -52,6 +49,13 @@ import {
   OPPONENT_ACTIVITY_TIMEOUT_SECONDS, // Timeout threshold for claiming opponent loss due to inactivity
   SYSTEM_SENDER_NAME, // Import display name for system messages
 } from '../Constants';
+import {
+  createUndoCommandParams,
+  decodeHexMove,
+  IGGC_POLL_INTERVAL_MS,
+  parseLegacyUndoEvent,
+  parseRestartSessionId,
+} from '../server/igGameCenterProtocol';
 import { useAuth } from '../hooks/useAuth';
 import { useGameSession } from '../hooks/useGameSession';
 
@@ -62,12 +66,6 @@ export const OnlinePlayContext = createContext<OnlinePlayContextType | undefined
 interface OnlinePlayManagerProviderProps {
   children: ReactNode;
 }
-
-// Refresh intervals for polling server data
-const LOBBY_REFRESH_INTERVAL_MS = 15000;
-const WAITING_ROOM_REFRESH_INTERVAL_MS = 3000;
-const ACTIVE_GAME_REFRESH_INTERVAL_MS = 2500;
-
 
 export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps> = ({ children }) => {
   const { loggedInUser } = useAuth();
@@ -264,12 +262,12 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
   const _handleOpponentMoveEvent = useCallback((event: IgGameEvent) => {
     if (!gameController || !event.data || event.uid === loggedInUser?.uid) return;
 
-    const [rStr, cStr] = event.data.split('-');
-    const r = parseInt(rStr, 10);
-    const c = parseInt(cStr, 10);
-    if (!isNaN(r) && !isNaN(c)) {
-      if (DEBUG) console.log(`OnlinePlayManager: Processing opponent's MOVE event: ${r}-${c}`);
-      gameController.applyOpponentMove(r, c);
+    const move = decodeHexMove(event.data, gameController.options.boardSize);
+    if (move?.kind === 'place') {
+      if (DEBUG) console.log(`OnlinePlayManager: Processing opponent MOVE ${event.data}`);
+      gameController.applyOpponentMove(move.coordinate.r, move.coordinate.c);
+    } else if (move?.kind === 'swap') {
+      gameController.applyOpponentSwap();
     } else {
       if (DEBUG) console.warn("OnlinePlayManager: Received invalid MOVE data from opponent:", event.data);
     }
@@ -306,43 +304,31 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
   }, [gameController, loggedInUser, playerListCache, addSystemChatMessage]);
 
   const _handleUndoEvent = useCallback((event: IgGameEvent): string | null => {
-    if (!event.data) return null;
-    try {
-      const undoData = JSON.parse(event.data) as UndoEventData;
-      if (DEBUG) console.log("OnlinePlayManager: Processing UNDO event:", undoData, "Event type:", event.type);
+    const undoEvent = parseLegacyUndoEvent(event);
+    if (!undoEvent) return null;
+    const requestingPlayerName = playerListCache.find(player => player.uid === event.uid)?.name || 'Opponent';
+    let systemMessageText: string | null = null;
 
-      let systemMessageText: string | null = null;
-
-      if (event.type === "UNDOASK" && undoData.by_uid !== loggedInUser?.uid) {
+    if (undoEvent.kind === 'request' && event.uid !== loggedInUser?.uid) {
         setUndoRequestState(UndoRequestState.REQUEST_RECEIVED);
         setOpponentUndoRequestDetails({
-          targetEid: undoData.target_eid || '',
-          requestingPlayerUid: undoData.by_uid,
-          requestingPlayerName: undoData.by_name,
+          targetEid: undoEvent.moveIndex === null ? '' : String(undoEvent.moveIndex),
+          requestingPlayerUid: event.uid,
+          requestingPlayerName,
         });
-        systemMessageText = `${undoData.by_name} requests an undo.`;
+        systemMessageText = `${requestingPlayerName} requests an undo.`;
         setOnlineGameStatusMessage(systemMessageText);
         addSystemChatMessage(systemMessageText, event.stamp);
-        showNotification("Undo Request", `${undoData.by_name} wants to undo their last move.`, "hex-undo-request", true);
-      } else if (event.type === "UNDODONE") {
+        showNotification("Undo Request", `${requestingPlayerName} wants to undo a move.`, "hex-undo-request", true);
+    } else if (undoEvent.kind === 'completed') {
         setUndoRequestState(UndoRequestState.ACCEPTED_AWAITING_SERVER);
         setIsAwaitingUndoBoardReset(true);
-        systemMessageText = `Undo request accepted by ${undoData.by_name}. Board will update.`;
+        systemMessageText = `Undo accepted by ${requestingPlayerName}. Board will update.`;
         setOnlineGameStatusMessage(systemMessageText);
         addSystemChatMessage(systemMessageText, event.stamp);
-      } else if (event.type === "UNDO" && undoData.action === UndoEventAction.DENY) {
-        setUndoRequestState(UndoRequestState.DENIED);
-        systemMessageText = `Undo request denied by ${undoData.by_name}.`;
-        setOnlineGameStatusMessage(systemMessageText);
-        addSystemChatMessage(systemMessageText, event.stamp);
-        setTimeout(() => setUndoRequestState(UndoRequestState.IDLE), 3000);
-      }
-      return systemMessageText;
-    } catch (e) {
-      console.error("OnlinePlayManager: Error parsing UNDO event data:", e, event.data);
-      return null;
     }
-  }, [loggedInUser, showNotification, addSystemChatMessage]);
+    return systemMessageText;
+  }, [loggedInUser, playerListCache, showNotification, addSystemChatMessage]);
 
   const processEventsFromResponse = useCallback(
     (response: IgCommandHandlerResponse, currentSid: string | null) => {
@@ -362,7 +348,7 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
       eventsToProcess.forEach(event => {
         const eventEidNum = parseInt(event.eid, 10);
         if (!isNaN(eventEidNum) && eventEidNum > highestEidProcessedThisBatch) highestEidProcessedThisBatch = eventEidNum;
-        if (currentSid !== onlineGameSessionId) return;
+        if (currentSid !== gameController.onlineOpponent?.sid) return;
         
         const eventPlayerName = currentPlayersForEventContext.find(p => p.uid === event.uid)?.name || `User (${event.uid.substring(0,4)})`;
         let systemMessageTextFromSpecificEvent: string | null = null;
@@ -518,7 +504,7 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
               }
             }
             break;
-          case 'UNDO': case 'UNDOASK': case 'UNDODONE': 
+          case 'UNDOASK': case 'UNDODONE':
             const undoSysMsg = _handleUndoEvent(event); 
             if (undoSysMsg) systemMessagesTextsAddedBySpecificEventsThisBatch.push(undoSysMsg);
             break;
@@ -541,6 +527,20 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
         if (highestEidProcessedThisBatch > currentLastEidNum) {
           gameController.onlineOpponent.lastEventId = String(highestEidProcessedThisBatch);
         }
+      }
+
+      if (
+        eventsToProcess.some(event => event.type === 'UNDODONE')
+        && successResponse.gameData?.board
+      ) {
+        gameController.reinitializeFromOnlineState(
+          successResponse.gameData.board,
+          successResponse.playerList || [],
+          successResponse.sessionInfo,
+        );
+        setIsAwaitingUndoBoardReset(false);
+        setUndoRequestState(UndoRequestState.IDLE);
+        setOpponentUndoRequestDetails(null);
       }
 
       const currentActivePlayerUid = successResponse.sessionInfo?.activePlayer;
@@ -622,78 +622,53 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
     ]
   );
 
+  const _joinRestartedSession = useCallback(async (newSid: string) => {
+    if (!gameController || !loggedInUser || !onlineGameServer) return;
+    setRematchOfferState(RematchOfferState.ACCEPTED_AWAITING_NEW_GAME);
+    setOpponentRematchOfferDetails(null);
+    setOnlineGameStatusMessage('Starting rematch...');
+    setChatMessages([]);
+    setUndoRequestState(UndoRequestState.IDLE);
+    setOpponentUndoRequestDetails(null);
+    setOnlineGameSessionId(newSid);
+    gameController.setOnlineGameSession(newSid, onlineGameServer);
+    const refreshResponse = await gameController.onlineOpponent!.sendCommand('REFRESH', loggedInUser);
+    processEventsFromResponse(refreshResponse, newSid);
+    setRematchOfferState(RematchOfferState.IDLE);
+  }, [gameController, loggedInUser, onlineGameServer, processEventsFromResponse]);
+
   const _handleRematchEventCallbackLogic = useCallback((event: IgGameEvent) => {
-    if (!event.data) return;
-    try {
-      const rematchData = JSON.parse(event.data);
-      if (DEBUG) console.log("OnlinePlayManager: Processing REMATCH event (via _handleRematchEventCallback):", rematchData, "Event type:", event.type);
+    const newSid = parseRestartSessionId(event);
+    if (!newSid) return;
+    const offeringPlayerName = playerListCache.find(player => player.uid === event.uid)?.name || 'Opponent';
+    const timestamp = event.stamp || Math.floor(Date.now() / 1000);
 
-      const { action, by_uid, by_name, new_sid, new_server } = rematchData;
-      const systemMsgTimestamp = event.stamp || Math.floor(Date.now() / 1000);
-      let systemMessageText: string | null = null;
-
-
-      if (by_uid === loggedInUser?.uid) {
-        if (action === 'OFFER' || event.type === 'REMATCH_OFFER') {
-            setRematchOfferState(RematchOfferState.OFFER_SENT);
-            systemMessageText = `You offered a rematch.`;
-        } else if (action === 'CANCEL' || event.type === 'REMATCH_CANCELLED') {
-            setRematchOfferState(RematchOfferState.CANCELLED_BY_LOCAL);
-            systemMessageText = `You cancelled the rematch offer.`;
-        } else if (action === 'DECLINE' || event.type === 'REMATCH_DECLINED') {
-            setRematchOfferState(RematchOfferState.DECLINED_BY_LOCAL);
-            systemMessageText = `You declined the rematch.`;
-        }
-      } else {
-        if (action === 'OFFER' || event.type === 'REMATCH_OFFER') {
-          setRematchOfferState(RematchOfferState.OFFER_RECEIVED);
-          setOpponentRematchOfferDetails({ offeringPlayerUid: by_uid, offeringPlayerName: by_name });
-          systemMessageText = `${by_name} offers a rematch!`;
-          setOnlineGameStatusMessage(systemMessageText);
-          showNotification("Rematch Offer", `${by_name} wants to play again!`, "hex-rematch-offer", true);
-        } else if (action === 'CANCEL' || event.type === 'REMATCH_CANCELLED') {
-          setRematchOfferState(RematchOfferState.CANCELLED_BY_OPPONENT);
-          setOpponentRematchOfferDetails(null);
-          systemMessageText = `${by_name} cancelled the rematch offer.`;
-          setOnlineGameStatusMessage(systemMessageText);
-          setTimeout(() => setRematchOfferState(RematchOfferState.IDLE), 3000);
-        } else if (action === 'ACCEPT' || event.type === 'REMATCH_ACCEPTED') {
-          setRematchOfferState(RematchOfferState.ACCEPTED_AWAITING_NEW_GAME);
-          setOpponentRematchOfferDetails(null);
-          systemMessageText = `${by_name} accepted the rematch! Starting new game...`;
-          setOnlineGameStatusMessage(systemMessageText);
-        } else if (action === 'DECLINE' || event.type === 'REMATCH_DECLINED') {
-          setRematchOfferState(RematchOfferState.DECLINED_BY_OPPONENT);
-          setOpponentRematchOfferDetails(null);
-          systemMessageText = `${by_name} declined the rematch.`;
-          setOnlineGameStatusMessage(systemMessageText);
-          setTimeout(() => setRematchOfferState(RematchOfferState.IDLE), 3000);
-        }
-      }
-
-      if (systemMessageText) {
-        addSystemChatMessage(systemMessageText, systemMsgTimestamp);
-      }
-
-      if (event.type === "NEWSID_FOR_REMATCH" && new_sid && new_server && gameController) {
-        if (DEBUG) console.log(`OnlinePlayManager: Received NEWSID_FOR_REMATCH. New SID: ${new_sid}, Server: ${new_server}`);
-        addSystemChatMessage(`Rematch accepted. New game starting... (SID: ${new_sid})`, systemMsgTimestamp);
-        setChatMessages([]);
-        setUndoRequestState(UndoRequestState.IDLE); setOpponentUndoRequestDetails(null);
-        setRematchOfferState(RematchOfferState.IDLE); setOpponentRematchOfferDetails(null);
-        setOnlineGameSessionId(new_sid);
-        setOnlineGameServer(new_server);
-        gameController.setOnlineGameSession(new_sid, new_server);
-        if (gameController.onlineOpponent && loggedInUser) {
-            gameController.onlineOpponent.sendCommand('REFRESH', loggedInUser)
-                .then(refreshResponse => processEventsFromResponse(refreshResponse, new_sid))
-                .catch(err => console.error("Error REFRESHING new rematch game:", err));
-        }
-      }
-    } catch (e) {
-      console.error("OnlinePlayManager: Error parsing REMATCH event data:", e, event.data);
+    if (event.uid === loggedInUser?.uid) {
+      addSystemChatMessage(`Rematch created. Starting game ${newSid}.`, timestamp);
+      void _joinRestartedSession(newSid).catch(error => {
+        setRematchOfferState(RematchOfferState.ERROR);
+        setOnlineGameStatusMessage(`Could not start rematch: ${(error as Error).message}`);
+      });
+      return;
     }
-  }, [loggedInUser, gameController, processEventsFromResponse, showNotification, addSystemChatMessage]);
+
+    setRematchOfferState(RematchOfferState.OFFER_RECEIVED);
+    setOpponentRematchOfferDetails({
+      offeringPlayerUid: event.uid,
+      offeringPlayerName,
+      newSessionId: newSid,
+    });
+    const message = `${offeringPlayerName} started a rematch. Join them?`;
+    setOnlineGameStatusMessage(message);
+    addSystemChatMessage(message, timestamp);
+    showNotification('Rematch', message, 'hex-rematch-offer', true);
+  }, [
+    loggedInUser,
+    playerListCache,
+    _joinRestartedSession,
+    showNotification,
+    addSystemChatMessage,
+  ]);
 
   useEffect(() => {
     _handleRematchEventCallbackRef.current = _handleRematchEventCallbackLogic;
@@ -736,8 +711,8 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
       gameController.setOnlineGameSession(successResponse.sid, successResponse.server);
       setOnlineGameStatusMessage(`Connecting to game room ${successResponse.sid}...`);
 
-      const joinCommandResponse = await gameController.onlineOpponent!.sendCommand('JOIN', loggedInUser, { place: '1' });
-      if (joinCommandResponse.error) throw new Error(`Failed to JOIN game session: ${(joinCommandResponse as IgUserRegistrationError).message}`);
+      const joinCommandResponse = await gameController.onlineOpponent!.sendCommand(null, loggedInUser);
+      if (joinCommandResponse.error) throw new Error(`Failed to enter game session: ${(joinCommandResponse as IgUserRegistrationError).message}`);
       processEventsFromResponse(joinCommandResponse, successResponse.sid);
 
       const joinSuccess = joinCommandResponse as IgCommandHandlerSuccessResponse;
@@ -807,9 +782,16 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
       createdSid = sid;
       setOnlineGameSessionId(sid); setOnlineGameServer(server);
       gameController.setOnlineGameSession(sid, server);
-      setOnlineGameStatusMessage(`Game ${sid} created. Setting up options...`);
+      setOnlineGameStatusMessage(`Entering game room ${sid}...`);
       addSystemChatMessage(`Game room ${sid} created by you.`, Math.floor(Date.now()/1000));
 
+      // The original Android client performed the handler handshake immediately
+      // after board creation; the server can discard an unclaimed board quickly.
+      const joinResponse = await gameController.onlineOpponent!.sendCommand(null, loggedInUser);
+      if (joinResponse.error) throw new Error(`Failed to enter created game: ${(joinResponse as IgUserRegistrationError).message}`);
+      processEventsFromResponse(joinResponse, sid);
+
+      setOnlineGameStatusMessage(`Game ${sid} created. Setting up options...`);
       const setupParamsForCommand: Record<string, string> = {
         boardSize: String(settings.boardSize),
         timerTotal: String(settings.timerMode === 'perGame' ? settings.timerDurationSeconds : 0),
@@ -821,11 +803,6 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
       const setupResponse = await gameController.onlineOpponent!.sendCommand('SETUP', loggedInUser, setupParamsForCommand);
       if (setupResponse.error) throw new Error(`Failed to SETUP game options: ${(setupResponse as IgUserRegistrationError).message}`);
       processEventsFromResponse(setupResponse, sid);
-
-      setOnlineGameStatusMessage(`Entering game room ${sid}...`);
-      const joinResponse = await gameController.onlineOpponent!.sendCommand('JOIN', loggedInUser, { place: '1' });
-      if (joinResponse.error) throw new Error(`Failed to JOIN created game: ${(joinResponse as IgUserRegistrationError).message}`);
-      processEventsFromResponse(joinResponse, sid);
 
       const joinSuccess = joinResponse as IgCommandHandlerSuccessResponse;
       setWaitingRoomData({
@@ -885,11 +862,23 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
       setOnlineGameServer(session.server);
       gameController.setOnlineGameSession(session.sid, session.server);
 
-      const joinResponse = await gameController.onlineOpponent!.sendCommand('JOIN', loggedInUser, { fromLobby: 'true' });
-      if (joinResponse.error) throw new Error(`Failed to JOIN game session: ${(joinResponse as IgUserRegistrationError).message}`);
+      const joinResponse = await gameController.onlineOpponent!.sendCommand(null, loggedInUser, {
+        fromLobby: 'true',
+        lobbyOwnerName: session.members.find(member => member.uid === session.ownerUid)?.name || 'Host',
+        lobbyHostUid: session.ownerUid,
+      });
+      if (joinResponse.error) throw new Error(`Failed to enter game session: ${(joinResponse as IgUserRegistrationError).message}`);
       processEventsFromResponse(joinResponse, session.sid);
 
-      const joinSuccess = joinResponse as IgCommandHandlerSuccessResponse;
+      const occupiedPlaces = new Set(session.members.map(member => member.place));
+      const availablePlace: '1' | '2' = occupiedPlaces.has('1') ? '2' : '1';
+      const placeResponse = await gameController.onlineOpponent!.sendCommand('PLACE', loggedInUser, {
+        place: availablePlace,
+      });
+      if (placeResponse.error) throw new Error(`Failed to take player seat: ${(placeResponse as IgUserRegistrationError).message}`);
+      processEventsFromResponse(placeResponse, session.sid);
+
+      const joinSuccess = placeResponse as IgCommandHandlerSuccessResponse;
       setWaitingRoomData({
         sessionInfo: joinSuccess.sessionInfo || null,
         playerList: joinSuccess.playerList?.map(p => ({ ...p, isReady: p.stat === PlayerStat.OFFERSTART })) || [],
@@ -1111,16 +1100,19 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
     undoRequestState === UndoRequestState.IDLE &&
     currentDisplayState.gamePhase === GamePhase.PLAYING &&
     (gameController?.turnCount ?? 0) > 0 &&
-    !!gameController?.lastLocalPlayerMoveServerEid &&
     !isOnlineActionLoading
   ), [gameOptions.player2ControlType, onlineGameSessionId, undoRequestState, currentDisplayState.gamePhase, gameController, isOnlineActionLoading]);
 
   const requestOnlineUndo = useCallback(async () => {
-    if (!loggedInUser || !gameController?.onlineOpponent || !canRequestOnlineUndoComputed || !gameController?.lastLocalPlayerMoveServerEid) return;
+    if (!loggedInUser || !gameController?.onlineOpponent || !canRequestOnlineUndoComputed) return;
     setIsOnlineActionLoading(true);
     setOnlineGameStatusMessage("Sending undo request...");
     try {
-      const response = await gameController.onlineOpponent.sendCommand('UNDO', loggedInUser, { type: 'ASK', target_eid: gameController.lastLocalPlayerMoveServerEid });
+      const response = await gameController.onlineOpponent.sendCommand(
+        'UNDO',
+        loggedInUser,
+        createUndoCommandParams('ASK', gameController.turnCount - 1),
+      );
       if (response.error) {
         setOnlineGameStatusMessage(`Undo request failed: ${(response as IgUserRegistrationError).message}`);
         setUndoRequestState(UndoRequestState.IDLE);
@@ -1143,7 +1135,11 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
     setIsOnlineActionLoading(true);
     setOnlineGameStatusMessage("Accepting undo request...");
     try {
-      const response = await gameController.onlineOpponent.sendCommand('UNDO', loggedInUser, { type: 'ACCEPT' });
+      const response = await gameController.onlineOpponent.sendCommand(
+        'UNDO',
+        loggedInUser,
+        createUndoCommandParams('ACCEPT'),
+      );
       if (response.error) {
         setOnlineGameStatusMessage(`Failed to accept undo: ${(response as IgUserRegistrationError).message}`);
         setUndoRequestState(UndoRequestState.IDLE);
@@ -1168,7 +1164,11 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
     setIsOnlineActionLoading(true);
     setOnlineGameStatusMessage("Denying undo request...");
     try {
-      const response = await gameController.onlineOpponent.sendCommand('UNDO', loggedInUser, { type: 'DENY' });
+      const response = await gameController.onlineOpponent.sendCommand(
+        'UNDO',
+        loggedInUser,
+        createUndoCommandParams('DENY'),
+      );
       if (response.error) {
         setOnlineGameStatusMessage(`Failed to deny undo: ${(response as IgUserRegistrationError).message}`);
       } else {
@@ -1205,6 +1205,10 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
         setTimeout(() => setRematchOfferState(RematchOfferState.IDLE), 3000);
       } else {
         processEventsFromResponse(response, onlineGameSessionId);
+        if (!(response as IgCommandHandlerSuccessResponse).eventList?.some(event => event.type === 'RESTART')) {
+          setRematchOfferState(RematchOfferState.OFFER_SENT);
+          setOnlineGameStatusMessage('Rematch requested.');
+        }
       }
     } catch (err: any) {
       setOnlineGameStatusMessage(`Error offering rematch: ${err.message}`);
@@ -1216,19 +1220,16 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
   }, [loggedInUser, gameController, canOfferRematchComputed, processEventsFromResponse, onlineGameSessionId]);
 
   const acceptRematch = useCallback(async () => {
-    if (!loggedInUser || !gameController?.onlineOpponent || rematchOfferState !== RematchOfferState.OFFER_RECEIVED) return;
+    if (
+      !loggedInUser
+      || !gameController?.onlineOpponent
+      || rematchOfferState !== RematchOfferState.OFFER_RECEIVED
+      || !opponentRematchOfferDetails
+    ) return;
     setIsOnlineActionLoading(true);
     setOnlineGameStatusMessage("Accepting rematch...");
     try {
-      const response = await gameController.onlineOpponent.sendCommand('RESTART', loggedInUser);
-      if (response.error) {
-        setOnlineGameStatusMessage(`Failed to accept rematch: ${(response as IgUserRegistrationError).message}`);
-        setRematchOfferState(RematchOfferState.ERROR);
-        setTimeout(() => setRematchOfferState(RematchOfferState.IDLE), 3000);
-      } else {
-        setOpponentRematchOfferDetails(null);
-        processEventsFromResponse(response, onlineGameSessionId);
-      }
+      await _joinRestartedSession(opponentRematchOfferDetails.newSessionId);
     } catch (err: any) {
       setOnlineGameStatusMessage(`Error accepting rematch: ${err.message}`);
       setRematchOfferState(RematchOfferState.ERROR);
@@ -1236,35 +1237,39 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
     } finally {
       setIsOnlineActionLoading(false);
     }
-  }, [loggedInUser, gameController, rematchOfferState, processEventsFromResponse, onlineGameSessionId]);
+  }, [
+    loggedInUser,
+    gameController,
+    rematchOfferState,
+    opponentRematchOfferDetails,
+    _joinRestartedSession,
+  ]);
 
   const declineRematch = useCallback(async () => {
     if (!loggedInUser || !gameController?.onlineOpponent || rematchOfferState !== RematchOfferState.OFFER_RECEIVED) return;
     setIsOnlineActionLoading(true);
     setOnlineGameStatusMessage("Declining rematch...");
     try {
-      const response = await gameController.onlineOpponent.sendCommand('REMATCH', loggedInUser, { type: 'DECLINE' });
-      if (response.error) {
-        setOnlineGameStatusMessage(`Failed to decline rematch: ${(response as IgUserRegistrationError).message}`);
-      } else {
-        setOpponentRematchOfferDetails(null);
-        processEventsFromResponse(response, onlineGameSessionId);
-        setTimeout(() => setRematchOfferState(RematchOfferState.IDLE), 3000);
-      }
+      // The legacy protocol has no decline command. Declining simply leaves the
+      // newly-created board unjoined, matching the production Android client.
+      setOpponentRematchOfferDetails(null);
+      setRematchOfferState(RematchOfferState.DECLINED_BY_LOCAL);
+      setTimeout(() => setRematchOfferState(RematchOfferState.IDLE), 3000);
     } catch (err: any) {
       setOnlineGameStatusMessage(`Error declining rematch: ${err.message}`);
     } finally {
       setIsOnlineActionLoading(false);
     }
-  }, [loggedInUser, gameController, rematchOfferState, processEventsFromResponse, onlineGameSessionId]);
+  }, [loggedInUser, gameController, rematchOfferState]);
 
   useEffect(() => {
     if (!loggedInUser || !onlineGameSessionId || !onlineGameServer || !gameController?.onlineOpponent) {
       return;
     }
 
-    let intervalId: number;
-    const pollInterval = isInWaitingRoom ? WAITING_ROOM_REFRESH_INTERVAL_MS : ACTIVE_GAME_REFRESH_INTERVAL_MS;
+    let timeoutId: number | undefined;
+    let cancelled = false;
+    const pollInterval = IGGC_POLL_INTERVAL_MS;
 
     const fetchData = async () => {
       if (!gameController?.onlineOpponent || !onlineGameSessionId || !loggedInUser) return;
@@ -1372,10 +1377,19 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
       }
     };
 
-    fetchData();
-    intervalId = setInterval(fetchData, pollInterval) as unknown as number;
+    const runPoll = async () => {
+      await fetchData();
+      if (!cancelled) {
+        timeoutId = window.setTimeout(runPoll, pollInterval);
+      }
+    };
 
-    return () => clearInterval(intervalId);
+    void runPoll();
+
+    return () => {
+      cancelled = true;
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+    };
   }, [
     loggedInUser, onlineGameSessionId, onlineGameServer, gameController,
     processEventsFromResponse, leaveOnlineGame, isOnlineActionLoading,

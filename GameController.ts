@@ -15,6 +15,8 @@ import {
   MIN_BOARD_SIZE, MAX_BOARD_SIZE, DEFAULT_BOARD_SIZE, AI_NAME, ONLINE_OPPONENT_NAME,
   DEFAULT_PLAYER_1_PROFILE_BASE, DEFAULT_PLAYER_2_PROFILE_BASE, DEBUG
 } from './Constants'; // Game-wide constant values.
+import { encodeHexMove } from './server/igGameCenterProtocol';
+import type { IgCommandHandlerSuccessResponse } from './types';
 
 /**
  * Artificial delay (in milliseconds) introduced before the AI makes its move.
@@ -313,7 +315,33 @@ export class GameController {
     if (row < 0 || row >= this.options.boardSize || col < 0 || col >= this.options.boardSize || this.boardMatrix[row][col] !== null) {
         return;
     }
+    if (this.options.player2ControlType === PlayerControlType.ONLINE) {
+      const accepted = await this.sendOnlineMove(encodeHexMove({ r: row, c: col }, this.options.boardSize));
+      if (!accepted) return;
+    }
     this.processValidMove(row, col);
+  }
+
+  private async sendOnlineMove(move: string): Promise<boolean> {
+    if (!this.onlineOpponent?.sid || !this.loggedInUser) return false;
+    try {
+      const response = await this.onlineOpponent.sendCommand('MOVE', this.loggedInUser, { move });
+      if (response.error) {
+        if (DEBUG) console.error('Server rejected MOVE:', response.message);
+        return false;
+      }
+      const moveEvent = (response as IgCommandHandlerSuccessResponse).eventList
+        ?.filter(event => event.type === 'MOVE' && event.uid === this.loggedInUser?.uid)
+        .at(-1);
+      if (moveEvent) {
+        this.lastLocalPlayerMoveServerEid = moveEvent.eid;
+        this.lastProcessedMoveServerEid = moveEvent.eid;
+      }
+      return true;
+    } catch (error) {
+      if (DEBUG) console.error('Failed to send MOVE:', error);
+      return false;
+    }
   }
 
   public getEffectiveLocalPlayerSide(): Player | null {
@@ -349,18 +377,6 @@ export class GameController {
       if (this.options.player2ControlType !== PlayerControlType.AI || !this.isAiTurn()) {
          (this.playerGameTimeLeft[this.currentPlayerId] as number) += (this.options.timerSettings.incrementSeconds as number);
       }
-    }
-
-    if (this.options.player2ControlType === PlayerControlType.ONLINE && this.onlineOpponent?.sid && this.loggedInUser && this.currentPlayerId === this.getEffectiveLocalPlayerSide()) {
-        const moveString = `${row}-${col}`;
-        this.onlineOpponent.sendCommand('MOVE', this.loggedInUser, { move: moveString, lasteid: this.onlineOpponent.lastEventId })
-            .then(response => { 
-                if (response.error && DEBUG) console.error("Error sending MOVE:", (response as any).message); 
-                // The server's response to MOVE will contain the EID for this move.
-                // This EID should be processed by OnlinePlayManager and then stored here.
-                // For now, we assume OnlinePlayManager handles setting lastLocalPlayerMoveServerEid.
-            })
-            .catch(e => DEBUG && console.error("Exception sending MOVE:", e));
     }
 
     const winCheckPath = this.checkForWin(this.currentPlayerId);
@@ -458,19 +474,17 @@ export class GameController {
   private async executeSwap(): Promise<void> {
     if (!this.firstGameMoveDetails) return;
     const playerInitiatingSwapDecision = this.currentPlayerId;
+    if (
+      this.options.player2ControlType === PlayerControlType.ONLINE
+      && playerInitiatingSwapDecision === this.getEffectiveLocalPlayerSide()
+      && !(await this.sendOnlineMove('SWAP'))
+    ) {
+      return;
+    }
     this.recordCurrentStateForUndo();
     this.isPlayerRolesSwapped = true;
     this.currentPlayerId = (this.firstGameMoveDetails.player === Player.ONE) ? Player.TWO : Player.ONE;
     this.swappedCellCoordinate = { ...this.firstGameMoveDetails.coord };
-    
-    if (this.options.player2ControlType === PlayerControlType.ONLINE && this.onlineOpponent?.sid && this.loggedInUser) {
-        if (playerInitiatingSwapDecision === this.getEffectiveLocalPlayerSide()) {
-            try {
-                await this.onlineOpponent.sendCommand('MOVE', this.loggedInUser, { move: 'SWAP', lasteid: this.onlineOpponent.lastEventId });
-                // Server response to SWAP will contain EID, handle in OnlinePlayManager
-            } catch (e) { DEBUG && console.error("Exception sending SWAP:", e); }
-        }
-    }
     
     if (this.options.timerSettings.mode === 'perTurn') this.currentTurnTimeLeft = this.options.timerSettings.durationPerTurn;
     this.startTimerIfNeeded(); // This will correctly handle AI or Human turn post-swap
@@ -481,6 +495,15 @@ export class GameController {
         // If online, OnlinePlayManager will handle opponent's turn or next local player's turn based on server
         this.notifyUpdate();
     }, 1500);
+  }
+
+  public applyOpponentSwap(): void {
+    if (
+      this.options.player2ControlType === PlayerControlType.ONLINE
+      && this.currentPlayerId !== this.getEffectiveLocalPlayerSide()
+    ) {
+      void this.executeSwap();
+    }
   }
 
   private recordCurrentStateForUndo(): void {
