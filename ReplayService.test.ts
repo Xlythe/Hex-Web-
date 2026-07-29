@@ -238,7 +238,7 @@ it('shows the first real move immediately and keeps later moves paced', () => {
     player2Profile: { ...DEFAULT_PLAYER_2_PROFILE_BASE },
     wasPlayer1ProfileAssignedToSideONE_atGameStart: true,
     finalWinnerPlayerColor: Player.ONE,
-    winReason: 'connection',
+    winReason: WinReason.CONNECTION,
     finalWinningPath: [{ r: 0, c: 0 }, { r: 1, c: 0 }],
     wasPlayerRolesSwappedAtGameEnd: false,
     history: [
