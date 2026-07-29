@@ -9,53 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
-  <script src="https://cdn.tailwindcss.com"></script>
   <script>
-    // Configure Tailwind CSS to use the 'class' strategy for dark mode
-    if (typeof tailwind !== 'undefined') {
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            colors: {
-              'theme-text-primary': '#404040',
-              'theme-text-subtle': '#afafaf',
-              'theme-bg-light': '#fafafa',
-              'theme-bg-dark': '#333333',
-              'theme-card-bg-light': '#ffffff',
-              'theme-card-bg-dark': '#1e1e1e',
-              'theme-divider-light': '#f3f3f3',
-              'theme-divider-dark': '#000000',
-              'theme-icon-light': '#404040',
-              'theme-icon-light-hover': '#afafaf',
-              'theme-icon-dark': '#ffffff',
-              'theme-icon-dark-hover': '#f0f0f0',
-              'theme-link-dark': '#ffcc00',
-              'theme-link-dark-hover': '#ffdd44',
-              // Custom button colors
-              'theme-button-primary-bg-light': '#404040',
-              'theme-button-primary-text-light': '#ffffff',
-              'theme-button-primary-bg-light-hover': '#303030',
-              'theme-button-primary-bg-dark': '#ffcc00',
-              'theme-button-primary-text-dark': '#1e1e1e', // Dark text on yellow bg
-              'theme-button-primary-bg-dark-hover': '#ffdd44',
-              'theme-button-secondary-bg-light': '#e5e5e5',
-              'theme-button-secondary-text-light': '#404040',
-              'theme-button-secondary-bg-light-hover': '#d5d5d5',
-              'theme-button-secondary-bg-dark': '#4a4a4a',
-              'theme-button-secondary-text-dark': '#ffffff',
-              'theme-button-secondary-bg-dark-hover': '#5a5a5a',
-              'theme-button-icon-bg-hover-light': '#f0f0f0',
-              'theme-button-icon-bg-hover-dark': '#3a3a3a',
-            },
-            fontFamily: {
-              sans: ['Roboto', 'sans-serif'],
-            },
-          }
-        }
-      };
-    }
-
     window.addEventListener('load', () => {
       // Define the desired minimum dimensions for your application.
       // Adjust these values as needed.

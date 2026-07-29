@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Roboto", sans-serif;
+
+  --color-theme-text-primary: #404040;
+  --color-theme-text-subtle: #afafaf;
+  --color-theme-bg-light: #fafafa;
+  --color-theme-bg-dark: #333333;
+  --color-theme-card-bg-light: #ffffff;
+  --color-theme-card-bg-dark: #1e1e1e;
+  --color-theme-divider-light: #f3f3f3;
+  --color-theme-divider-dark: #000000;
+  --color-theme-icon-light: #404040;
+  --color-theme-icon-light-hover: #afafaf;
+  --color-theme-icon-dark: #ffffff;
+  --color-theme-icon-dark-hover: #f0f0f0;
+  --color-theme-link-dark: #ffcc00;
+  --color-theme-link-dark-hover: #ffdd44;
+  --color-theme-button-primary-bg-light: #404040;
+  --color-theme-button-primary-text-light: #ffffff;
+  --color-theme-button-primary-bg-light-hover: #303030;
+  --color-theme-button-primary-bg-dark: #ffcc00;
+  --color-theme-button-primary-text-dark: #1e1e1e;
+  --color-theme-button-primary-bg-dark-hover: #ffdd44;
+  --color-theme-button-secondary-bg-light: #e5e5e5;
+  --color-theme-button-secondary-text-light: #404040;
+  --color-theme-button-secondary-bg-light-hover: #d5d5d5;
+  --color-theme-button-secondary-bg-dark: #4a4a4a;
+  --color-theme-button-secondary-text-dark: #ffffff;
+  --color-theme-button-secondary-bg-dark-hover: #5a5a5a;
+  --color-theme-button-icon-bg-hover-light: #f0f0f0;
+  --color-theme-button-icon-bg-hover-dark: #3a3a3a;
+}
