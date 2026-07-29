@@ -1,6 +1,7 @@
 import { expect, Page, test } from '@playwright/test';
 
 const screenshot = async (page: Page, name: string) => {
+  await page.evaluate(() => window.scrollTo(0, 0));
   await page.addStyleTag({
     content: `
       *, *::before, *::after {
@@ -11,7 +12,17 @@ const screenshot = async (page: Page, name: string) => {
       }
     `,
   });
+  const horizontalOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - window.innerWidth,
+  );
+  expect(horizontalOverflow).toBeLessThanOrEqual(1);
   await expect(page).toHaveScreenshot(`${name}.png`);
+};
+
+const scrollDialogToBottom = async (page: Page) => {
+  await page.getByRole('dialog').locator('.overflow-y-auto').first().evaluate(element => {
+    element.scrollTop = element.scrollHeight;
+  });
 };
 
 const openSettings = async (page: Page) => {
@@ -65,11 +76,15 @@ test('help page', async ({ page }) => {
   await page.getByRole('button', { name: 'Open Help' }).click();
   await expect(page.getByRole('heading', { name: 'Game Rules & Help' })).toBeVisible();
   await screenshot(page, 'help');
+  await scrollDialogToBottom(page);
+  await screenshot(page, 'help-bottom');
 });
 
 test('settings page', async ({ page }) => {
   await openSettings(page);
   await screenshot(page, 'settings');
+  await scrollDialogToBottom(page);
+  await screenshot(page, 'settings-bottom');
 });
 
 test('new-game confirmation page', async ({ page }) => {

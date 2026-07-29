@@ -34,6 +34,24 @@ export default defineConfig({
         viewport: { width: 1280, height: 900 },
       },
     },
+    {
+      name: 'phone-portrait',
+      use: {
+        ...devices['Pixel 7'],
+        channel: 'chrome',
+        deviceScaleFactor: 1,
+        viewport: { width: 412, height: 915 },
+      },
+    },
+    {
+      name: 'phone-landscape',
+      use: {
+        ...devices['Pixel 7 landscape'],
+        channel: 'chrome',
+        deviceScaleFactor: 1,
+        viewport: { width: 915, height: 412 },
+      },
+    },
   ],
   webServer: {
     command: 'pnpm dev --host 127.0.0.1 --port 4173',
