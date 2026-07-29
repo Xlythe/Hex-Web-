@@ -12,6 +12,7 @@ import { ReplayService, ReplaySnapshot } from '../ReplayService';
 import { createEmptyBoard } from '../utils';
 import { MIN_BOARD_SIZE, MAX_BOARD_SIZE, DEFAULT_BOARD_SIZE, DEFAULT_CHAT_NOTIFICATIONS_ENABLED } from '../Constants'; // Added DEFAULT_CHAT_NOTIFICATIONS_ENABLED
 import { useAuth } from '../hooks/useAuth'; // Used to obtain the logged-in user, relevant for online gameplay features.
+import { safeStorageJson, safeStorageSet } from '../storage';
 
 /**
  * @interface CurrentDisplayState
@@ -184,9 +185,8 @@ export const GameSessionProvider: React.FC<GameSessionProviderProps> = ({ childr
 
   // State for storing completed games. Loaded from localStorage and filtered to recent games.
   const [completedGames, setCompletedGames] = useState<CompletedGameEntry[]>(() => {
-    const storedGames = localStorage.getItem('hexCompletedGames');
     try {
-      const games: CompletedGameEntry[] = storedGames ? JSON.parse(storedGames) : [];
+      const games = safeStorageJson<CompletedGameEntry[]>('hexCompletedGames', []);
       const thirtyDaysInMillis = 30 * 24 * 60 * 60 * 1000;
       const thirtyDaysAgoTimestamp = Date.now() - thirtyDaysInMillis;
       // Filter games to keep only those from the last 30 days and sort them by most recent first.
@@ -202,7 +202,7 @@ export const GameSessionProvider: React.FC<GameSessionProviderProps> = ({ childr
   // Effect to save the `completedGames` list to localStorage whenever it changes.
   // Limits stored games to the latest 20 to prevent localStorage bloat.
   useEffect(() => {
-    localStorage.setItem('hexCompletedGames', JSON.stringify(completedGames.slice(0, 20)));
+    safeStorageSet('hexCompletedGames', JSON.stringify(completedGames.slice(0, 20)));
   }, [completedGames]);
 
   // Effect to initialize or re-initialize GameController and ReplayService

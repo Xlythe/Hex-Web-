@@ -20,6 +20,11 @@ import {
   USER_PROFILE_CACHE_TIMESTAMP_KEY, // New constant for profile cache timestamp
   PROFILE_CACHE_MAX_AGE_MS       // New constant for cache duration (15 minutes)
 } from '../Constants'; // Application-wide constants
+import {
+  safeStorageGet,
+  safeStorageRemove,
+  safeStorageSet,
+} from '../storage';
 
 /**
  * Defines the structure of the result object returned by authentication operations
@@ -80,10 +85,10 @@ interface AuthManagerProviderProps {
  */
 export const AuthManagerProvider: React.FC<AuthManagerProviderProps> = ({ children }) => {
   const shouldValidateStoredSession = useRef(
-    localStorage.getItem(LOGGED_IN_USER_STORAGE_KEY) !== null,
+    safeStorageGet(LOGGED_IN_USER_STORAGE_KEY) !== null,
   );
   const [loggedInUser, setLoggedInUser] = useState<LoggedInUser | null>(() => {
-    const storedUserJson = localStorage.getItem(LOGGED_IN_USER_STORAGE_KEY);
+    const storedUserJson = safeStorageGet(LOGGED_IN_USER_STORAGE_KEY);
     if (storedUserJson) {
       try {
         const storedUser: LoggedInUser = JSON.parse(storedUserJson);
@@ -92,11 +97,11 @@ export const AuthManagerProvider: React.FC<AuthManagerProviderProps> = ({ childr
           return storedUser;
         } else {
           if (DEBUG) console.log("AuthManagerProvider: Stored user session expired or invalid. Clearing.");
-          localStorage.removeItem(LOGGED_IN_USER_STORAGE_KEY);
+          safeStorageRemove(LOGGED_IN_USER_STORAGE_KEY);
         }
       } catch (e) {
         console.error("AuthManagerProvider: Failed to parse loggedInUser from localStorage:", e);
-        localStorage.removeItem(LOGGED_IN_USER_STORAGE_KEY);
+        safeStorageRemove(LOGGED_IN_USER_STORAGE_KEY);
       }
     }
     return null;
@@ -105,18 +110,18 @@ export const AuthManagerProvider: React.FC<AuthManagerProviderProps> = ({ childr
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   // --- Profile Caching State ---
   const [cachedUserProfile, setCachedUserProfile] = useState<IgUserProfileData | null>(() => {
-    const storedProfile = localStorage.getItem(USER_PROFILE_CACHE_KEY);
+    const storedProfile = safeStorageGet(USER_PROFILE_CACHE_KEY);
     try {
       return storedProfile ? JSON.parse(storedProfile) : null;
     } catch (e) {
       console.error("AuthManager: Failed to parse cachedUserProfile from localStorage:", e);
-      localStorage.removeItem(USER_PROFILE_CACHE_KEY); // Clear corrupted data
+      safeStorageRemove(USER_PROFILE_CACHE_KEY); // Clear corrupted data
       return null;
     }
   });
   const [isProfileLoading, setIsProfileLoading] = useState(false);
   const [profileCacheTimestamp, setProfileCacheTimestamp] = useState<number | null>(() => {
-    const storedTimestamp = localStorage.getItem(USER_PROFILE_CACHE_TIMESTAMP_KEY);
+    const storedTimestamp = safeStorageGet(USER_PROFILE_CACHE_TIMESTAMP_KEY);
     return storedTimestamp ? parseInt(storedTimestamp, 10) : null;
   });
 
@@ -128,10 +133,10 @@ export const AuthManagerProvider: React.FC<AuthManagerProviderProps> = ({ childr
         userToStore.expiryTimestamp = Date.now() + ONE_YEAR_MS;
         if (DEBUG) console.log("AuthManagerProvider: Updated/set expiry for user:", userToStore.name);
       }
-      localStorage.setItem(LOGGED_IN_USER_STORAGE_KEY, JSON.stringify(userToStore));
+      safeStorageSet(LOGGED_IN_USER_STORAGE_KEY, JSON.stringify(userToStore));
       if (DEBUG) console.log("AuthManagerProvider: Saved user to localStorage:", userToStore.name);
     } else {
-      localStorage.removeItem(LOGGED_IN_USER_STORAGE_KEY);
+      safeStorageRemove(LOGGED_IN_USER_STORAGE_KEY);
       if (DEBUG) console.log("AuthManagerProvider: Removed user from localStorage.");
     }
   }, [loggedInUser]);
@@ -150,8 +155,8 @@ export const AuthManagerProvider: React.FC<AuthManagerProviderProps> = ({ childr
         setCachedUserProfile(resultAsProfile);
         const now = Date.now();
         setProfileCacheTimestamp(now);
-        localStorage.setItem(USER_PROFILE_CACHE_KEY, JSON.stringify(resultAsProfile));
-        localStorage.setItem(USER_PROFILE_CACHE_TIMESTAMP_KEY, String(now));
+        safeStorageSet(USER_PROFILE_CACHE_KEY, JSON.stringify(resultAsProfile));
+        safeStorageSet(USER_PROFILE_CACHE_TIMESTAMP_KEY, String(now));
         if (DEBUG) console.log(`AuthManager: Profile for UID ${uid} cached successfully.`);
         return resultAsProfile;
       } else {
@@ -174,8 +179,8 @@ export const AuthManagerProvider: React.FC<AuthManagerProviderProps> = ({ childr
           if (DEBUG) console.warn(`AuthManager: Clearing profile cache for UID ${uid} due to unrecoverable API error: ${apiError.message}`);
           setCachedUserProfile(null);
           setProfileCacheTimestamp(null);
-          localStorage.removeItem(USER_PROFILE_CACHE_KEY);
-          localStorage.removeItem(USER_PROFILE_CACHE_TIMESTAMP_KEY);
+          safeStorageRemove(USER_PROFILE_CACHE_KEY);
+          safeStorageRemove(USER_PROFILE_CACHE_TIMESTAMP_KEY);
         } else {
           if (DEBUG) console.warn(`AuthManager: Retaining profile cache for UID ${uid} despite API error: ${apiError.message}. Error not deemed critical for cache invalidation.`);
         }
@@ -284,9 +289,9 @@ export const AuthManagerProvider: React.FC<AuthManagerProviderProps> = ({ childr
     setLoggedInUser(null);
     setCachedUserProfile(null); 
     setProfileCacheTimestamp(null);
-    localStorage.removeItem(USER_PROFILE_CACHE_KEY);
-    localStorage.removeItem(USER_PROFILE_CACHE_TIMESTAMP_KEY);
-    localStorage.removeItem(LOGGED_IN_USER_STORAGE_KEY); // Ensure loggedInUser is also cleared
+    safeStorageRemove(USER_PROFILE_CACHE_KEY);
+    safeStorageRemove(USER_PROFILE_CACHE_TIMESTAMP_KEY);
+    safeStorageRemove(LOGGED_IN_USER_STORAGE_KEY); // Ensure loggedInUser is also cleared
   }, [loggedInUser?.name]);
 
   const updateProfile = useCallback(async (params: IgUserUpdateParams): Promise<AuthResult> => {

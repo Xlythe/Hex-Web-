@@ -11,6 +11,12 @@ import {
   ALLOWED_ONLINE_GAME_DURATIONS_MINUTES, ALLOWED_ONLINE_SIZES, DEFAULT_ONLINE_BOARD_SIZE,
   DEFAULT_CHAT_NOTIFICATIONS_ENABLED, CHAT_NOTIFICATIONS_ENABLED_STORAGE_KEY
 } from './Constants';
+import {
+  safeStorageGet,
+  safeStorageJson,
+  safeStorageRemove,
+  safeStorageSet,
+} from './storage';
 
 /**
  * @class GameOptions
@@ -181,28 +187,32 @@ export class GameOptions {
    * @returns {GameOptions} A new `GameOptions` instance populated with loaded or default settings.
    */
   public static load(): GameOptions {
-    const boardSizeStr = localStorage.getItem('hexGameLastBoardSize');
+    const boardSizeStr = safeStorageGet('hexGameLastBoardSize');
     const boardSize = boardSizeStr ? parseInt(boardSizeStr, 10) : DEFAULT_BOARD_SIZE;
     
-    const timerSettingsStored = localStorage.getItem('hexGameTimerSettings');
-    const swapRuleEnabledStored = localStorage.getItem('hexGameSwapRuleEnabled');
-    const swapRuleEnabled = swapRuleEnabledStored !== null ? JSON.parse(swapRuleEnabledStored) : DEFAULT_SWAP_RULE_ENABLED;
+    const timerSettingsStored = safeStorageGet('hexGameTimerSettings');
+    const swapRuleEnabled = safeStorageJson(
+      'hexGameSwapRuleEnabled',
+      DEFAULT_SWAP_RULE_ENABLED,
+    );
     
-    const themeMode = (localStorage.getItem('hexGameThemeMode') as ThemeMode | null) || 'system';
+    const themeMode = (safeStorageGet('hexGameThemeMode') as ThemeMode | null) || 'system';
 
-    const player2LocalName = (localStorage.getItem('hexPlayer2LocalName') as string | null) || DEFAULT_PLAYER_2_PROFILE_BASE.name;
-    const player2ControlType = (localStorage.getItem('hexPlayer2ControlType') as PlayerControlType | null) || DEFAULT_PLAYER_2_CONTROL_TYPE;
-    const aiDifficulty = (localStorage.getItem('hexAiDifficulty') as AiDifficulty | null) || DEFAULT_AI_DIFFICULTY;
-    const chatNotificationsEnabledStored = localStorage.getItem(CHAT_NOTIFICATIONS_ENABLED_STORAGE_KEY);
-    const chatNotificationsEnabled = chatNotificationsEnabledStored !== null ? JSON.parse(chatNotificationsEnabledStored) : DEFAULT_CHAT_NOTIFICATIONS_ENABLED;
+    const player2LocalName = safeStorageGet('hexPlayer2LocalName') || DEFAULT_PLAYER_2_PROFILE_BASE.name;
+    const player2ControlType = (safeStorageGet('hexPlayer2ControlType') as PlayerControlType | null) || DEFAULT_PLAYER_2_CONTROL_TYPE;
+    const aiDifficulty = (safeStorageGet('hexAiDifficulty') as AiDifficulty | null) || DEFAULT_AI_DIFFICULTY;
+    const chatNotificationsEnabled = safeStorageJson(
+      CHAT_NOTIFICATIONS_ENABLED_STORAGE_KEY,
+      DEFAULT_CHAT_NOTIFICATIONS_ENABLED,
+    );
 
 
     let p1Profile = { ...DEFAULT_PLAYER_1_PROFILE_BASE };
-    const p1Stored = localStorage.getItem('hexPlayer1Profile');
+    const p1Stored = safeStorageGet('hexPlayer1Profile');
     if (p1Stored) try { p1Profile = JSON.parse(p1Stored); } catch (e) { /* use default */ }
 
     let p2Profile = { ...DEFAULT_PLAYER_2_PROFILE_BASE };
-    const p2Stored = localStorage.getItem('hexPlayer2Profile');
+    const p2Stored = safeStorageGet('hexPlayer2Profile');
     if (p2Stored) try { p2Profile = JSON.parse(p2Stored); } catch (e) { /* use default */ }
 
     let loadedTimerSettings: TimerSettings = { 
@@ -259,20 +269,20 @@ export class GameOptions {
    * Includes saving AI and Online settings, and timer increments.
    */
   public save(): void {
-    localStorage.setItem('hexGameLastBoardSize', String(this.boardSize));
-    localStorage.setItem('hexGameTimerSettings', JSON.stringify(this.timerSettings));
-    localStorage.setItem('hexGameSwapRuleEnabled', JSON.stringify(this.swapRuleEnabled));
-    localStorage.setItem('hexPlayer1Profile', JSON.stringify(this.player1Profile));
-    localStorage.setItem('hexPlayer2Profile', JSON.stringify(this.player2Profile));
-    localStorage.setItem('hexGameThemeMode', this.themeMode);
-    localStorage.setItem('hexPlayer2LocalName', this.player2LocalName);
-    localStorage.setItem('hexPlayer2ControlType', this.player2ControlType);
+    safeStorageSet('hexGameLastBoardSize', String(this.boardSize));
+    safeStorageSet('hexGameTimerSettings', JSON.stringify(this.timerSettings));
+    safeStorageSet('hexGameSwapRuleEnabled', JSON.stringify(this.swapRuleEnabled));
+    safeStorageSet('hexPlayer1Profile', JSON.stringify(this.player1Profile));
+    safeStorageSet('hexPlayer2Profile', JSON.stringify(this.player2Profile));
+    safeStorageSet('hexGameThemeMode', this.themeMode);
+    safeStorageSet('hexPlayer2LocalName', this.player2LocalName);
+    safeStorageSet('hexPlayer2ControlType', this.player2ControlType);
     if (this.player2ControlType === PlayerControlType.AI) {
-      localStorage.setItem('hexAiDifficulty', this.aiDifficulty);
+      safeStorageSet('hexAiDifficulty', this.aiDifficulty);
     } else {
-      localStorage.removeItem('hexAiDifficulty'); // Remove if not AI
+      safeStorageRemove('hexAiDifficulty'); // Remove if not AI
     }
-    localStorage.setItem(CHAT_NOTIFICATIONS_ENABLED_STORAGE_KEY, JSON.stringify(this.chatNotificationsEnabled));
+    safeStorageSet(CHAT_NOTIFICATIONS_ENABLED_STORAGE_KEY, JSON.stringify(this.chatNotificationsEnabled));
   }
 
   /**

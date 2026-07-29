@@ -7,6 +7,7 @@
 
 import { CellState } from './types';    
 import { NETWORK_UID_STORAGE_KEY } from './Constants';
+import { safeStorageGet, safeStorageSet } from './storage';
 
 /**
  * @function formatTime
@@ -71,7 +72,7 @@ const generateRandomString = (length: number): string => {
  * @returns {string} The network UID.
  */
 export const getOrGenerateNetworkUid = (): string => {
-  let networkUid = localStorage.getItem(NETWORK_UID_STORAGE_KEY);
+  let networkUid = safeStorageGet(NETWORK_UID_STORAGE_KEY);
   if (!networkUid) {
     const prefix = "web-";
     // Generate a random part. Max length for random part is 64 - prefix.length.
@@ -84,7 +85,7 @@ export const getOrGenerateNetworkUid = (): string => {
     // Ensure it fits within 64 total characters including prefix, and does not use invalid symbols (toString(36) is fine).
     networkUid = prefix + randomPart.replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 64 - prefix.length);
     
-    localStorage.setItem(NETWORK_UID_STORAGE_KEY, networkUid);
+    safeStorageSet(NETWORK_UID_STORAGE_KEY, networkUid);
   }
   return networkUid;
 };

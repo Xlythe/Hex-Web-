@@ -1,5 +1,6 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { safeStorageJson, safeStorageSet } from '../storage';
 
 const MUSIC_STORAGE_KEY = 'hexGameMusicEnabledV1'; // Added V1 for potential future preference changes
 const MUSIC_URL = 'https://storage.cloud.google.com/hex-game-assets/hex_bg_music.mp3';
@@ -12,8 +13,7 @@ export const useBackgroundMusic = () => {
   const fadeIntervalRef = useRef<number | null>(null);
 
   const [isMusicGloballyEnabled, setIsMusicGloballyEnabled] = useState<boolean>(() => {
-    const storedPreference = localStorage.getItem(MUSIC_STORAGE_KEY);
-    return storedPreference ? JSON.parse(storedPreference) : true; // Default to enabled
+    return safeStorageJson(MUSIC_STORAGE_KEY, true);
   });
 
   const [isActuallyPlaying, setIsActuallyPlaying] = useState<boolean>(false);
@@ -123,7 +123,7 @@ export const useBackgroundMusic = () => {
   const toggleMusicPreference = useCallback(() => {
     const newPreference = !isMusicGloballyEnabled;
     setIsMusicGloballyEnabled(newPreference);
-    localStorage.setItem(MUSIC_STORAGE_KEY, JSON.stringify(newPreference));
+    safeStorageSet(MUSIC_STORAGE_KEY, JSON.stringify(newPreference));
   }, [isMusicGloballyEnabled]);
 
 
