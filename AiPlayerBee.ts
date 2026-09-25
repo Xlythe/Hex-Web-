@@ -31,14 +31,15 @@ interface DistanceArrays {
  * A behavior-preserving TypeScript port of Android's production BeeGameAI.
  *
  * The unusual two-distance calculation, move ordering, pruning rules, coordinate
- * rotation, and 32-bit board hash are intentional. They are part of the legacy
- * bot contract and are covered by cross-platform reference-line tests.
+ * rotation are intentional. They are part of the legacy bot contract and are
+ * covered by cross-platform reference-line tests. Cache keys use the complete
+ * board because the Android 32-bit hash can alias different positions.
  */
 export class AiPlayerBee {
   private pieces: InternalBoard = [];
   private gridSize = 0;
   private team: Player = Player.ONE;
-  private readonly lookUpTable = new Map<number, number>();
+  private readonly lookUpTable = new Map<string, number>();
 
   public constructor(
     private readonly maxDepth: number,
@@ -56,6 +57,9 @@ export class AiPlayerBee {
 
     this.initializeBoard(boardMatrix);
     this.team = playerSide;
+    // Evaluations only help within this search. Keeping every position from
+    // earlier turns grows the cache for an entire long game.
+    this.lookUpTable.clear();
 
     if (emptyCells.length === this.gridSize * this.gridSize) {
       const center = Math.floor(this.gridSize / 2);
@@ -77,9 +81,6 @@ export class AiPlayerBee {
 
   private initializeBoard(boardMatrix: BoardMatrix): void {
     const nextGridSize = boardMatrix.length;
-    if (nextGridSize !== this.gridSize) {
-      this.lookUpTable.clear();
-    }
     this.gridSize = nextGridSize;
 
     const paddedSize = this.gridSize + 2;
@@ -424,12 +425,11 @@ export class AiPlayerBee {
     );
   }
 
-  private piecesHash(): number {
-    let value = this.pieces.length - 2;
+  private piecesHash(): string {
+    let value = `${this.pieces.length - 2}:`;
     for (let row = 1; row < this.pieces.length - 1; row++) {
       for (let column = 1; column < this.pieces.length - 1; column++) {
-        // Java's Integer arithmetic wraps at 32 bits.
-        value = (Math.imul(value, 3) + this.pieces[row][column]) | 0;
+        value += this.pieces[row][column];
       }
     }
     return value;
