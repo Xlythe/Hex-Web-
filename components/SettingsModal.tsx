@@ -373,7 +373,7 @@ const SettingsModalComponent: React.FC<SettingsModalProps> = ({
                                 {isPlayer2Ai && (
                                     <fieldset className="mt-2">
                                         <legend className={`${labelBaseClasses} mb-1`}>AI Difficulty</legend>
-                                        <div className="flex space-x-4 mt-1">
+                                        <div className="flex flex-wrap gap-3 mt-1">
                                             {(Object.values(AiDifficulty) as AiDifficulty[]).map(level => (
                                                 <label key={level} className="flex items-center space-x-1 cursor-pointer">
                                                     <input type="radio" name="aiDifficulty" value={level} checked={aiDifficulty === level} onChange={onAiDifficultyChange} className="form-radio h-4 w-4 text-indigo-600 dark:text-yellow-500 border-gray-300 dark:border-gray-600 focus:ring-indigo-500 dark:focus:ring-yellow-600 bg-theme-card-bg-light dark:bg-theme-card-bg-dark" />

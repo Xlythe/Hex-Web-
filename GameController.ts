@@ -474,8 +474,17 @@ export class GameController {
       this.aiMoveTimeoutId = setTimeout(() => {
         if (!this.isAiTurn()) { this.setAiThinking(false); return; } // Check again after delay
         const aiControlledSide = this.currentPlayerId;
-        const move = this.aiPlayer!.getMove(this.boardMatrix, aiControlledSide);
+        const aiCanSwap = this.options.swapRuleEnabled && this.turnCount === 1
+          && this.firstGameMoveDetails !== null
+          && aiControlledSide !== this.firstGameMoveDetails.player;
+        const move = this.aiPlayer!.getMove(this.boardMatrix, aiControlledSide, aiCanSwap);
         this.setAiThinking(false); // AI finished thinking
+        if (move && aiCanSwap && this.firstGameMoveDetails
+            && move.r === this.firstGameMoveDetails.coord.r
+            && move.c === this.firstGameMoveDetails.coord.c) {
+          void this.executeSwap();
+          return;
+        }
         if (move && this.boardMatrix[move.r][move.c] === null) this.processValidMove(move.r, move.c);
         else if (move && DEBUG) console.warn("AI chose invalid cell:", move);
         else if (DEBUG) console.warn("AI no move.");

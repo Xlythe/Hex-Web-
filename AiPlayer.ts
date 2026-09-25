@@ -2,18 +2,19 @@
 import { BoardMatrix, Coordinate, Player, AiDifficulty } from './types';
 import { AiPlayerEasy } from './AiPlayerEasy';
 import { AiPlayerBee } from './AiPlayerBee';
+import { AiPlayerTree } from './AiPlayerTree';
 
 /**
  * @interface AiStrategy
  * @description Defines the common interface for different AI difficulty strategies.
  */
 interface AiStrategy {
-  getMove(boardMatrix: BoardMatrix, playerSide: Player, emptyCells: Coordinate[]): Coordinate | null;
+  getMove(boardMatrix: BoardMatrix, playerSide: Player, emptyCells: Coordinate[], allowSwap?: boolean): Coordinate | null;
 }
 
 export interface AndroidBotDefinition {
   difficulty: AiDifficulty;
-  algorithm: 'GameAI' | 'BeeAI';
+  algorithm: 'GameAI' | 'BeeAI' | 'TreeAI';
   maxDepth: number | null;
   beamSize: number | null;
 }
@@ -40,12 +41,18 @@ export const ANDROID_BOT_ROSTER: readonly AndroidBotDefinition[] = [
     maxDepth: 3,
     beamSize: 4,
   },
+  {
+    difficulty: AiDifficulty.TREE,
+    algorithm: 'TreeAI',
+    maxDepth: null,
+    beamSize: null,
+  },
 ] as const;
 
 /**
  * @class AiPlayer
  * @description Represents an AI opponent for the Hex game.
- * It dispatches move generation to a specific strategy class (Easy, Medium, Hard)
+ * It dispatches move generation to a specific strategy class (Easy, Medium, Hard, Tree)
  * based on the configured difficulty.
  */
 export class AiPlayer {
@@ -67,6 +74,9 @@ export class AiPlayer {
       case AiDifficulty.HARD:
         this.strategy = new AiPlayerBee(3, 4);
         break;
+      case AiDifficulty.TREE:
+        this.strategy = new AiPlayerTree();
+        break;
       default:
         console.warn(`Unknown AI difficulty: ${difficulty}. Defaulting to Easy.`);
         this.strategy = new AiPlayerEasy();
@@ -81,12 +91,12 @@ export class AiPlayer {
    * @param {Player} playerSide - The player side (Player.ONE or Player.TWO) for which the AI is making a move.
    * @returns {Coordinate | null} The coordinate of the AI's chosen move, or null if no move is possible (e.g., board full).
    */
-  public getMove(boardMatrix: BoardMatrix, playerSide: Player): Coordinate | null {
+  public getMove(boardMatrix: BoardMatrix, playerSide: Player, allowSwap = false): Coordinate | null {
     const emptyCells = this.getEmptyCells(boardMatrix);
     if (emptyCells.length === 0) {
       return null;
     }
-    return this.strategy.getMove(boardMatrix, playerSide, emptyCells);
+    return this.strategy.getMove(boardMatrix, playerSide, emptyCells, allowSwap);
   }
 
   /**

@@ -66,7 +66,7 @@ describe('Android bot parity', () => {
     expect(bot.piecesHash()).not.toBe(emptyKey);
   });
 
-  it('offers the same three bots with the same search parameters', () => {
+  it('offers the same four bots with the same search parameters', () => {
     expect(ANDROID_BOT_ROSTER).toEqual([
       {
         difficulty: AiDifficulty.EASY,
@@ -86,10 +86,16 @@ describe('Android bot parity', () => {
         maxDepth: 3,
         beamSize: 4,
       },
+      {
+        difficulty: AiDifficulty.TREE,
+        algorithm: 'TreeAI',
+        maxDepth: null,
+        beamSize: null,
+      },
     ]);
   });
 
-  it.each(Object.values(AiDifficulty))(
+  it.each([AiDifficulty.EASY, AiDifficulty.MEDIUM, AiDifficulty.HARD])(
     '%s opens and replies to a corner in the center like Android',
     difficulty => {
       const opening = new AiPlayer(difficulty, difficulty).getMove(
