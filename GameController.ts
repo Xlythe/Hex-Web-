@@ -33,7 +33,7 @@ const AI_THINKING_DELAY_MS = 750;
  * - Processing player moves, including validation and application.
  * - Invoking AI opponent logic if a player is AI-controlled.
  * - Implementing game rules such as the swap rule.
- * - Detecting win conditions using a Depth-First Search (DFS) algorithm.
+ * - Detecting wins and finding a shortest connection with breadth-first search.
  * - Managing game timers (per turn or per game).
  * - Maintaining a history of moves for undo functionality.
  * - Randomizing which player profile starts on which side (Player.ONE or Player.TWO).
@@ -573,34 +573,36 @@ export class GameController {
     return neighbors;
   }
 
-  private dfsForWinCondition(r: number, c: number, playerSide: Player, visited: boolean[][], boardSize: number): Coordinate[] | null {
-    if (r < 0 || r >= boardSize || c < 0 || c >= boardSize || visited[r][c] || this.boardMatrix[r][c] !== playerSide) return null;
-    visited[r][c] = true; const currentCell = { r, c };
-    if (playerSide === Player.ONE && c === boardSize - 1) return [currentCell];
-    if (playerSide === Player.TWO && r === boardSize - 1) return [currentCell];
-    const neighbors = this.getNeighbors(r, c);
-    for (const neighbor of neighbors) {
-      const pathFromNeighbor = this.dfsForWinCondition(neighbor.r, neighbor.c, playerSide, visited, boardSize);
-      if (pathFromNeighbor) return [currentCell, ...pathFromNeighbor];
-    }
-    return null;
-  }
-
   public checkForWin(playerSide: Player): Coordinate[] | null {
-    const boardSize = this.options.boardSize; if (boardSize === 0) return null;
-    const visited: boolean[][] = Array(boardSize).fill(null).map(() => Array(boardSize).fill(false));
-    if (playerSide === Player.ONE) {
-      for (let r_start = 0; r_start < boardSize; r_start++) {
-        if (this.boardMatrix[r_start][0] === playerSide && !visited[r_start][0]) {
-          const winningPath = this.dfsForWinCondition(r_start, 0, playerSide, visited, boardSize);
-          if (winningPath) return winningPath;
-        }
+    const size = this.options.boardSize;
+    if (size === 0) return null;
+    const visited = Array.from({ length: size }, () => Array<boolean>(size).fill(false));
+    const parent = Array.from({ length: size }, () => Array<Coordinate | null>(size).fill(null));
+    const queue: Coordinate[] = [];
+    for (let index = 0; index < size; index++) {
+      const start = playerSide === Player.ONE ? { r: index, c: 0 } : { r: 0, c: index };
+      if (this.boardMatrix[start.r][start.c] === playerSide) {
+        visited[start.r][start.c] = true;
+        queue.push(start);
       }
-    } else {
-      for (let c_start = 0; c_start < boardSize; c_start++) {
-        if (this.boardMatrix[0][c_start] === playerSide && !visited[0][c_start]) {
-          const winningPath = this.dfsForWinCondition(0, c_start, playerSide, visited, boardSize);
-          if (winningPath) return winningPath;
+    }
+    for (let head = 0; head < queue.length; head++) {
+      const cell = queue[head];
+      if ((playerSide === Player.ONE && cell.c === size - 1) ||
+          (playerSide === Player.TWO && cell.r === size - 1)) {
+        const path: Coordinate[] = [];
+        let current: Coordinate | null = cell;
+        while (current) {
+          path.push(current);
+          current = parent[current.r][current.c];
+        }
+        return path.reverse();
+      }
+      for (const neighbor of this.getNeighbors(cell.r, cell.c)) {
+        if (!visited[neighbor.r][neighbor.c] && this.boardMatrix[neighbor.r][neighbor.c] === playerSide) {
+          visited[neighbor.r][neighbor.c] = true;
+          parent[neighbor.r][neighbor.c] = cell;
+          queue.push(neighbor);
         }
       }
     }

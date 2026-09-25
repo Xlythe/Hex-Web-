@@ -91,6 +91,14 @@ test('local game page', async ({ page }) => {
   await screenshot(page, 'local-game');
 });
 
+test('Android inspired wheel opens its menu destinations', async ({ page }) => {
+  await page.locator('.hex-wheel-help').click();
+  await expect(page.getByRole('heading', { name: 'Game Rules & Help' })).toBeVisible();
+  await page.getByRole('dialog').getByRole('button', { name: /close/i }).first().click();
+  await page.locator('.hex-wheel-settings').click();
+  await expect(page.getByRole('heading', { name: 'Game Settings' })).toBeVisible();
+});
+
 test('help page', async ({ page }) => {
   await page.getByRole('button', { name: 'Open Help' }).click();
   await expect(page.getByRole('heading', { name: 'Game Rules & Help' })).toBeVisible();

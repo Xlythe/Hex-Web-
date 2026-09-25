@@ -777,6 +777,33 @@ const AppContent: React.FC = () => {
 
   return (
     <div className={`hex-app-shell min-h-screen flex flex-col items-center justify-center bg-theme-bg-light dark:bg-theme-bg-dark transition-all duration-300 ${isFullScreen ? 'p-0' : 'p-2 sm:p-4'}`}>
+      {!isFullScreen && <div className="hex-stage">
+        <aside className="hex-home" aria-label="Hex menu">
+          <div className="hex-home-intro"><span className="hex-home-rule" />HEX<span className="hex-home-subtitle">THE CONNECTION GAME</span></div>
+          <div className="hex-wheel" aria-label="Main actions">
+            <svg className="hex-wheel-art" viewBox="0 0 300 280" aria-hidden="true">
+              <path d="M75 10H225L300 140L225 270H75L0 140Z" fill="#f1f1f1" />
+              <path d="M75 10H225L216 27H84Z" fill="#cc5c57" />
+              <path d="M225 10L300 140L280 140L211 28Z" fill="#5f6ec2" />
+              <path d="M300 140L225 270L215 252L280 140Z" fill="#f9db00" />
+              <path d="M225 270H75L84 253H216Z" fill="#b7cf47" />
+              <path d="M75 270L0 140H20L85 252Z" fill="#f48935" />
+              <path d="M0 140L75 10L85 28L20 140Z" fill="#4ba5e2" />
+              <path d="M150 140L75 10M150 140L225 10M150 140L300 140M150 140L225 270M150 140L75 270M150 140L0 140" stroke="#d0d0d0" strokeWidth="1" />
+              <circle cx="150" cy="140" r="48" fill="#f1f1f1" />
+            </svg>
+            <span className="hex-wheel-center" aria-hidden="true">Hex</span>
+            <button type="button" className="hex-wheel-action hex-wheel-settings" onClick={openSettingsModal}>⚙<span>Settings</span></button>
+            <button type="button" className="hex-wheel-action hex-wheel-online" onClick={openSettingsModal}>⌁<span>Online</span></button>
+            <button type="button" className="hex-wheel-action hex-wheel-replay" disabled={completedGames.length === 0} onClick={() => document.querySelector('.hex-replay-anchor')?.scrollIntoView({ behavior: 'smooth' })}>↺<span>Replay</span></button>
+            <button type="button" className="hex-wheel-action hex-wheel-help" onClick={() => setIsHelpModalOpen(true)}>?<span>Help</span></button>
+            <button type="button" className="hex-wheel-action hex-wheel-account" onClick={() => loggedInUser ? setIsProfileModalOpen(true) : setIsLoginModalOpen(true)}>★<span>Account</span></button>
+            <button type="button" className="hex-wheel-action hex-wheel-play" onClick={handleRequestNewGameOrReset}>▶<span>Play</span></button>
+          </div>
+          <p className="hex-home-caption">Connect your sides. Make every move count.</p>
+          <span className="hex-home-rule hex-home-rule-bottom" />
+        </aside>
+      </div>}
       <div
         ref={gameCardRef}
         className={`hex-game-card ${isFullScreen
@@ -884,6 +911,7 @@ const AppContent: React.FC = () => {
             </div>
 
             {completedGames.length > 0 && !currentDisplayState.isReplayActive && isReplayListVisible && (
+              <div className="hex-replay-anchor">
               <ReplayHistoryList
                 completedGames={completedGames}
                 onStartReplay={handleStartReplayRequest}
@@ -894,6 +922,7 @@ const AppContent: React.FC = () => {
                     : (side === Player.ONE ? p2ProfileForGame : p1ProfileForGame);
                 }}
               />
+              </div>
             )}
             {showFinishedReplayControls && (
               <div className="mt-8 w-full max-w-2xl text-center">

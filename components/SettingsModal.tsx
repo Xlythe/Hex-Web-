@@ -424,7 +424,7 @@ const SettingsModalComponent: React.FC<SettingsModalProps> = ({
                                 className="form-checkbox h-4 w-4 text-indigo-600 dark:text-yellow-500 border-gray-300 dark:border-gray-600 rounded focus:ring-indigo-500 dark:focus:ring-yellow-600 bg-theme-card-bg-light dark:bg-theme-card-bg-dark disabled:opacity-70"
                                 />
                                 <span className={`text-sm ${browserNotificationPermission === 'denied' ? 'opacity-70' : ''}`}>
-                                Enable In-Game Chat Notifications
+                                Enable Online Turn and Chat Notifications
                                 </span>
                             </label>
                             <p className="mt-1 text-xs text-theme-text-subtle">

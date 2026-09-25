@@ -523,7 +523,7 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
           currentActivePlayerUid !== previousActivePlayerUidRef.current &&
           successResponse.sessionInfo?.status === 'ACTIVE' &&
           currentDisplayState.gamePhase === GamePhase.PLAYING) {
-        showNotification("Your Turn!", "It's your move in Hex.", "hex-turn-notification", false);
+        showNotification("Your Turn!", "It's your move in Hex.", "hex-turn-notification", true);
       }
       previousActivePlayerUidRef.current = currentActivePlayerUid;
 

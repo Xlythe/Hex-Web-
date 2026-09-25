@@ -15,6 +15,17 @@ import { describe, expect, it } from 'vitest';
  */
 
 describe('GameController', () => {
+it('returns a shortest winning connection when several paths exist', () => {
+  const options = new GameOptions(4);
+  options.player2ControlType = PlayerControlType.HUMAN;
+  const game = new GameController(options, () => {}, false);
+  game.boardMatrix = Array.from({ length: 4 }, () => Array(4).fill(Player.ONE));
+  const path = game.checkForWin(Player.ONE);
+  expect(path).toHaveLength(4);
+  expect(path?.[0].c).toBe(0);
+  expect(path?.[3].c).toBe(3);
+});
+
 it('supports moves, undo, wins, swaps, and completed game data', async () => {
 console.log('Running tests for GameController.ts');
 let allTestsPassed = true;
@@ -138,7 +149,7 @@ if (!winPath || winPath.length !== 3) {
 }
 
 // Test: checkForWin - Player.ONE complex "staircase" win on 4x4.
-// Path: (0,0) -> (1,0) -> (1,1) -> (2,1) -> (2,2) -> (3,2) -> (3,3)
+// The top-left stone is a detour; the shortest connection starts at (1,0).
 game.startGame();
 game.options.boardSize = 4;
 game.boardMatrix = createEmptyBoard(4, MIN_BOARD_SIZE, MAX_BOARD_SIZE, DEFAULT_BOARD_SIZE);
@@ -150,8 +161,8 @@ game.boardMatrix[2][2] = Player.ONE;
 game.boardMatrix[3][2] = Player.ONE;
 game.boardMatrix[3][3] = Player.ONE;
 winPath = game.checkForWin(Player.ONE);
-if (!winPath || winPath.length !== 7) {
-  console.error(`Test FAILED: checkForWin P1 complex staircase (4x4). Expected path length 7. Path: ${JSON.stringify(winPath)}`);
+if (!winPath || winPath.length !== 6) {
+  console.error(`Test FAILED: checkForWin P1 complex staircase (4x4). Expected path length 6. Path: ${JSON.stringify(winPath)}`);
   allTestsPassed = false;
 } else {
   console.log('Test PASSED: checkForWin P1 complex staircase (4x4).');
@@ -159,7 +170,7 @@ if (!winPath || winPath.length !== 7) {
 
 
 // Test: checkForWin - Player.TWO complex "staircase" win on 4x4.
-// Path: (0,0) -> (0,1) -> (1,1) -> (1,2) -> (2,2) -> (2,3) -> (3,3)
+// The top-left stone is a detour; the shortest connection starts at (0,1).
 game.startGame();
 game.options.boardSize = 4;
 game.boardMatrix = createEmptyBoard(4, MIN_BOARD_SIZE, MAX_BOARD_SIZE, DEFAULT_BOARD_SIZE);
@@ -171,8 +182,8 @@ game.boardMatrix[2][2] = Player.TWO;
 game.boardMatrix[2][3] = Player.TWO;
 game.boardMatrix[3][3] = Player.TWO;
 winPath = game.checkForWin(Player.TWO);
-if (!winPath || winPath.length !== 7) {
-  console.error(`Test FAILED: checkForWin P2 complex staircase (4x4). Expected path length 7. Path: ${JSON.stringify(winPath)}`);
+if (!winPath || winPath.length !== 6) {
+  console.error(`Test FAILED: checkForWin P2 complex staircase (4x4). Expected path length 6. Path: ${JSON.stringify(winPath)}`);
   allTestsPassed = false;
 } else {
   console.log('Test PASSED: checkForWin P2 complex staircase (4x4).');
