@@ -99,6 +99,24 @@ test('Android inspired wheel opens its menu destinations', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Game Settings' })).toBeVisible();
 });
 
+test('wheel follows a swipe and its labels rotate with it', async ({ page }) => {
+  const wheel = page.locator('.hex-wheel');
+  const bounds = await wheel.boundingBox();
+  expect(bounds).not.toBeNull();
+  const centerX = bounds!.x + bounds!.width / 2;
+  const centerY = bounds!.y + bounds!.height / 2;
+  const radius = bounds!.width * .39;
+  const before = await wheel.evaluate(element => getComputedStyle(element).transform);
+  await page.mouse.move(centerX + radius, centerY);
+  await page.mouse.down();
+  await page.mouse.move(centerX, centerY + radius, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(() => wheel.evaluate(element => getComputedStyle(element).transform)).not.toBe(before);
+  await expect(page.locator('.hex-wheel-replay')).toHaveCSS('transform', 'none');
+  await page.locator('.hex-wheel-help').click();
+  await expect(page.getByRole('heading', { name: 'Game Rules & Help' })).toBeVisible();
+});
+
 test('help page', async ({ page }) => {
   await page.getByRole('button', { name: 'Open Help' }).click();
   await expect(page.getByRole('heading', { name: 'Game Rules & Help' })).toBeVisible();

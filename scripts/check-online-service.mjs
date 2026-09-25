@@ -1,5 +1,5 @@
 const baseUrl = (process.env.VITE_IGGC_API_BASE_URL ||
-  'https://ig-game-center-proxy-12702774477.us-west1.run.app').replace(/\/+$/, '');
+  'https://hex-api.xlythe.com').replace(/\/+$/, '');
 
 const body = new URLSearchParams({
   app_id: '17',
@@ -24,8 +24,8 @@ try {
   if (!response.ok || !/<(?:errorMessage|loginResult)\b/i.test(text)) {
     throw new Error(`login API returned HTTP ${response.status} or an unexpected response`);
   }
-  console.log('igGameCenter login API responded with XML.');
+  console.log('Hex online API responded with XML.');
 } catch (error) {
-  console.error(`igGameCenter smoke check failed: ${error.message}`);
+  console.error(`Hex online API smoke check failed: ${error.message}`);
   process.exitCode = 1;
 }

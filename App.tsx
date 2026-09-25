@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { HexWheel } from './components/HexWheel';
 
 // Core Types
 import {
@@ -780,26 +781,14 @@ const AppContent: React.FC = () => {
       {!isFullScreen && <div className="hex-stage">
         <aside className="hex-home" aria-label="Hex menu">
           <div className="hex-home-intro"><span className="hex-home-rule" />HEX<span className="hex-home-subtitle">THE CONNECTION GAME</span></div>
-          <div className="hex-wheel" aria-label="Main actions">
-            <svg className="hex-wheel-art" viewBox="0 0 300 280" aria-hidden="true">
-              <path d="M75 10H225L300 140L225 270H75L0 140Z" fill="#f1f1f1" />
-              <path d="M75 10H225L216 27H84Z" fill="#cc5c57" />
-              <path d="M225 10L300 140L280 140L211 28Z" fill="#5f6ec2" />
-              <path d="M300 140L225 270L215 252L280 140Z" fill="#f9db00" />
-              <path d="M225 270H75L84 253H216Z" fill="#b7cf47" />
-              <path d="M75 270L0 140H20L85 252Z" fill="#f48935" />
-              <path d="M0 140L75 10L85 28L20 140Z" fill="#4ba5e2" />
-              <path d="M150 140L75 10M150 140L225 10M150 140L300 140M150 140L225 270M150 140L75 270M150 140L0 140" stroke="#d0d0d0" strokeWidth="1" />
-              <circle cx="150" cy="140" r="48" fill="#f1f1f1" />
-            </svg>
-            <span className="hex-wheel-center" aria-hidden="true">Hex</span>
-            <button type="button" className="hex-wheel-action hex-wheel-settings" onClick={openSettingsModal}>⚙<span>Settings</span></button>
-            <button type="button" className="hex-wheel-action hex-wheel-online" onClick={openSettingsModal}>⌁<span>Online</span></button>
-            <button type="button" className="hex-wheel-action hex-wheel-replay" disabled={completedGames.length === 0} onClick={() => document.querySelector('.hex-replay-anchor')?.scrollIntoView({ behavior: 'smooth' })}>↺<span>Replay</span></button>
-            <button type="button" className="hex-wheel-action hex-wheel-help" onClick={() => setIsHelpModalOpen(true)}>?<span>Help</span></button>
-            <button type="button" className="hex-wheel-action hex-wheel-account" onClick={() => loggedInUser ? setIsProfileModalOpen(true) : setIsLoginModalOpen(true)}>★<span>Account</span></button>
-            <button type="button" className="hex-wheel-action hex-wheel-play" onClick={handleRequestNewGameOrReset}>▶<span>Play</span></button>
-          </div>
+          <HexWheel actions={[
+            { key: 'settings', icon: '⚙', label: 'Settings', onClick: openSettingsModal },
+            { key: 'online', icon: '◎', label: 'Online', onClick: openSettingsModal },
+            { key: 'replay', icon: '↺', label: 'Replay', disabled: completedGames.length === 0, onClick: () => document.querySelector('.hex-replay-anchor')?.scrollIntoView({ behavior: 'smooth' }) },
+            { key: 'help', icon: '?', label: 'Help', onClick: () => setIsHelpModalOpen(true) },
+            { key: 'account', icon: '★', label: 'Account', onClick: () => loggedInUser ? setIsProfileModalOpen(true) : setIsLoginModalOpen(true) },
+            { key: 'play', icon: '▶', label: 'Play', onClick: handleRequestNewGameOrReset },
+          ]} />
           <p className="hex-home-caption">Connect your sides. Make every move count.</p>
           <span className="hex-home-rule hex-home-rule-bottom" />
         </aside>
@@ -836,12 +825,6 @@ const AppContent: React.FC = () => {
           <>
             <TimerDisplay currentDisplayState={currentDisplayState} gameController={gameController} gameOptions={gameOptions} getProfileForBoardSide={getProfileForBoardSide} getCurrentTurnParticipantProfile={getCurrentTurnParticipantProfile} isInWaitingRoom={isInWaitingRoom} isAiCurrentlyPlaying={isAiCurrentlyPlaying} />
             <StatusDisplay currentDisplayState={currentDisplayState} gameController={gameController} getProfileForBoardSide={getProfileForBoardSide} getCurrentTurnParticipantProfile={getCurrentTurnParticipantProfile} isInWaitingRoom={isInWaitingRoom} onlineGameStatusMessage={onlineGameStatusMessage} rematchOfferState={rematchOfferState} undoRequestState={undoRequestState} isAiCurrentlyPlaying={isAiCurrentlyPlaying} />
-            {!isInWaitingRoom && !currentDisplayState.isReplayActive && currentDisplayState.gamePhase === GamePhase.PLAYING && (
-              <div className={`hex-turn-banner ${currentDisplayState.currentPlayerId === Player.ONE ? 'hex-turn-banner-red' : 'hex-turn-banner-blue'}`} aria-live="polite">
-                <strong>{getCurrentTurnParticipantProfile().name}'s turn</strong>
-                <span>{currentDisplayState.currentPlayerId === Player.ONE ? 'Connect left to right' : 'Connect top to bottom'}</span>
-              </div>
-            )}
           </>
         )}
 
@@ -857,6 +840,13 @@ const AppContent: React.FC = () => {
         ) : isInWaitingRoom && onlineGameSessionId ? (
           <WaitingRoomScreen />
         ) : (
+          <div className="hex-board-stage">
+            {!currentDisplayState.isReplayActive && currentDisplayState.gamePhase === GamePhase.PLAYING && (
+              <div className={`hex-turn-banner ${currentDisplayState.currentPlayerId === Player.ONE ? 'hex-turn-banner-red' : 'hex-turn-banner-blue'}`} aria-live="polite">
+                <span className="hex-turn-name">{getCurrentTurnParticipantProfile().name}</span>
+                <strong>{isOnlineGameActive && currentDisplayState.currentPlayerId !== gameController.getEffectiveLocalPlayerSide() ? "Opponent's turn" : 'Your turn'}</strong>
+              </div>
+            )}
           <Board
             boardMatrix={currentDisplayState.boardMatrix}
             onCellClick={currentDisplayState.isReplayActive ? () => {} : makeMove}
@@ -876,6 +866,7 @@ const AppContent: React.FC = () => {
             onToggleFullScreen={handleToggleFullScreen}
             isReplayActive={currentDisplayState.isReplayActive}
           />
+          </div>
         )}
 
         {!isFullScreen && showGameArea && !isInWaitingRoom && (

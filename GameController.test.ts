@@ -192,7 +192,7 @@ if (!winPath || winPath.length !== 6) {
 
 // Test: Swap rule logic - Current Player after Swap
 // Verifies that after a swap, the turn correctly passes to the player who made the first move,
-// now playing as the opposite side.
+// playing the same side while the opening stone becomes the second side's.
 console.log("--- Testing Swap Rule: Current Player After Swap ---");
 updateCalledCount = 0;
 game.startGame();
@@ -204,7 +204,7 @@ game.currentPlayerId = Player.ONE; // Ensure P1 (Player.ONE side) starts
 
 const firstMoverSide: Player = Player.ONE as Player; 
 
-const firstMoveCoord = {r: 0, c: 0}; 
+const firstMoveCoord = {r: 0, c: 1};
 await game.makeMove(firstMoveCoord.r, firstMoveCoord.c); // First player (Player.ONE side) makes a move. 
 
 const firstMoveDetailsForSwapTest = game.firstGameMoveDetails;
@@ -224,16 +224,21 @@ updateCalledCount = 0; // Reset for the swap action
 if (firstMoveDetailsForSwapTest) { // Check if firstMoveDetailsForSwapTest is not null before accessing its properties
     await game.makeMove(firstMoveDetailsForSwapTest.coord.r, firstMoveDetailsForSwapTest.coord.c); // Second mover (Player.TWO side) swaps.
 
-    if (!game.isPlayerRolesSwapped) {
-        console.error("Test FAILED (Swap - Current Player): isPlayerRolesSwapped is not true after swap.");
+    if (game.isPlayerRolesSwapped) {
+        console.error("Test FAILED (Swap - Current Player): seat ownership changed after swap.");
+        allTestsPassed = false;
+    }
+
+    if (game.boardMatrix[0][1] !== null || game.boardMatrix[1][0] !== Player.TWO) {
+        console.error("Test FAILED (Swap - Current Player): off-axis opening was not transposed and recolored.");
         allTestsPassed = false;
     }
 
     const playerMakingFirstMove: Player = firstMoveDetailsForSwapTest.player;
-    const expectedCurrentPlayerAfterSwap = (playerMakingFirstMove === Player.ONE) ? Player.TWO : Player.ONE;
+    const expectedCurrentPlayerAfterSwap = playerMakingFirstMove;
     
     if (game.currentPlayerId !== expectedCurrentPlayerAfterSwap) {
-        console.error(`Test FAILED (Swap - Current Player): currentPlayerId after swap is incorrect. Expected ${expectedCurrentPlayerAfterSwap} (opposite of first mover's side ${firstMoveDetailsForSwapTest.player}), Got ${game.currentPlayerId}`);
+        console.error(`Test FAILED (Swap - Current Player): currentPlayerId after swap is incorrect. Expected ${expectedCurrentPlayerAfterSwap}, Got ${game.currentPlayerId}`);
         allTestsPassed = false;
     } else if (updateCalledCount === 0) { // An update for swap execution, then another for clearing visual feedback after timeout.
         console.error("Test FAILED (Swap - Current Player): Swap execution did not call onUpdate at least once.");

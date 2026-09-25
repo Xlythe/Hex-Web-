@@ -1,0 +1,10 @@
+services:
+  hex-mirror:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8997:8997"
+    volumes:
+      - hex-data:/data
+volumes:
+  hex-data:

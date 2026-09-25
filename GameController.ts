@@ -113,6 +113,7 @@ export class GameController {
   // --- Online Play State ---
   /** Stores the logged-in user details if available, for online interactions. */
   private loggedInUser: LoggedInUser | null = null;
+  private onlineLocalSeat: Player | null = null;
   /** EID of the last server-confirmed move made by the local player. Used for Online Undo. */
   public lastLocalPlayerMoveServerEid: string | null = null;
   /** EID of the last move event processed from the server, regardless of who made it. Used for Online Undo context. */
@@ -181,6 +182,14 @@ export class GameController {
     this.loggedInUser = user;
     this.notifyUpdate();
   }
+
+  public setOnlineLocalSeat(seat: Player): void {
+    if (this.onlineLocalSeat === seat && this.playerAgent1.profile.name === this.loggedInUser?.name) return;
+    this.onlineLocalSeat = seat;
+    this._isPlayer1ProfileAssignedToSideONE_atGameStart = seat === Player.ONE;
+    if (this.loggedInUser) this.playerAgent1.profile.name = this.loggedInUser.name;
+    this.notifyUpdate();
+  }
   
   public get isPlayer1ProfileAssignedToSideONE_atGameStart(): boolean {
     return this._isPlayer1ProfileAssignedToSideONE_atGameStart;
@@ -237,7 +246,9 @@ export class GameController {
 
 
     this.boardMatrix = createEmptyBoard(currentBoardSize, MIN_BOARD_SIZE, MAX_BOARD_SIZE, DEFAULT_BOARD_SIZE);
-    this._isPlayer1ProfileAssignedToSideONE_atGameStart = Math.random() < 0.5;
+    this._isPlayer1ProfileAssignedToSideONE_atGameStart = this.options.player2ControlType === PlayerControlType.ONLINE && this.onlineLocalSeat !== null
+      ? this.onlineLocalSeat === Player.ONE
+      : Math.random() < 0.5;
     
     this.currentPlayerId = Player.ONE;
     this.gamePhase = GamePhase.PLAYING; 
@@ -265,6 +276,7 @@ export class GameController {
       this.onlineOpponent = this.onlineOpponent || new OnlinePlayer(ONLINE_OPPONENT_NAME);
       // The onlineOpponent's name might be updated by server info later
       this.playerAgent2.profile.name = this.onlineOpponent.getName();
+      if (this.loggedInUser) this.playerAgent1.profile.name = this.loggedInUser.name;
       if (this.aiPlayer) this.aiPlayer = null; // Ensure aiPlayer is null if Online
     } else { // Human
       if (this.aiPlayer) this.aiPlayer = null;
@@ -346,6 +358,7 @@ export class GameController {
 
   public getEffectiveLocalPlayerSide(): Player | null {
       if (!this.loggedInUser) return null; // No local player if not logged in
+      if (this.options.player2ControlType === PlayerControlType.ONLINE) return this.onlineLocalSeat;
       if (this.playerAgent1.profile.name === this.loggedInUser.name) { // If P1 config matches logged in user
         return this._isPlayer1ProfileAssignedToSideONE_atGameStart ? 
                (this.isPlayerRolesSwapped ? Player.TWO : Player.ONE) : 
@@ -482,9 +495,14 @@ export class GameController {
       return;
     }
     this.recordCurrentStateForUndo();
-    this.isPlayerRolesSwapped = true;
-    this.currentPlayerId = (this.firstGameMoveDetails.player === Player.ONE) ? Player.TWO : Player.ONE;
-    this.swappedCellCoordinate = { ...this.firstGameMoveDetails.coord };
+    const { r, c } = this.firstGameMoveDetails.coord;
+    const newBoard = this.boardMatrix.map(row => [...row]);
+    newBoard[r][c] = null;
+    newBoard[c][r] = playerInitiatingSwapDecision;
+    this.boardMatrix = newBoard;
+    this.turnCount++;
+    this.currentPlayerId = this.firstGameMoveDetails.player;
+    this.swappedCellCoordinate = { r: c, c: r };
     
     if (this.options.timerSettings.mode === 'perTurn') this.currentTurnTimeLeft = this.options.timerSettings.durationPerTurn;
     this.startTimerIfNeeded(); // This will correctly handle AI or Human turn post-swap
@@ -721,6 +739,7 @@ export class GameController {
 
  public clearOnlineGameSession(): void {
     if (this.onlineOpponent) {
+      this.onlineLocalSeat = null;
       this.onlineOpponent.clearSessionInfo();
       this.lastLocalPlayerMoveServerEid = null;
       this.lastProcessedMoveServerEid = null;

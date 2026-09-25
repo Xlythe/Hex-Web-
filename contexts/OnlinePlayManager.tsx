@@ -313,6 +313,10 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
       }
 
       const successResponse = response as IgCommandHandlerSuccessResponse;
+      const localSeat = successResponse.playerList?.find(player => player.uid === loggedInUser?.uid)?.place;
+      if (localSeat === '1' || localSeat === '2') {
+        gameController.setOnlineLocalSeat(localSeat === '1' ? Player.ONE : Player.TWO);
+      }
       _updatePlayerListAndOpponentActivity(successResponse.playerList);
       const currentPlayersForEventContext = successResponse.playerList || playerListCache;
       const eventsToProcess = successResponse.eventList || [];

@@ -25,3 +25,5 @@ test-results
 *.njsproj
 *.sln
 *.sw?
+mirror/__pycache__/
+mirror/xlythe-tunnel.yml

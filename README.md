@@ -58,13 +58,14 @@ pnpm dev
 ```
 
 Open `http://localhost:3000`. Use `pnpm build` and `pnpm preview` to test
-the production bundle.
+the production bundle. The public website is deployed from `main` to
+`https://xlythe.github.io/Hex-Web-/` through GitHub Pages.
 
 ### Note on API Keys & Online Play
 
-- Production builds use the live igGameCenter adapter through the configured
-  HTTPS proxy. Development builds use the deterministic in-memory server by
-  default.
+- Production builds use the igGameCenter-compatible mirror at
+  `https://hex-api.xlythe.com`. Development builds use the deterministic
+  in-memory server by default. See `mirror/README.md` for server deployment.
 - Set `VITE_USE_REAL_API=true` to exercise the live service during development,
   or `VITE_USE_MOCK_API=true` to force the mock in another build mode.
 - Set `VITE_IGGC_API_BASE_URL` to override the proxy URL. The browser must not

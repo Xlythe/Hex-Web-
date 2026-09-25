@@ -34,7 +34,7 @@ export const APP_ID = '17';
 export const APP_CODE = 'wihamo8984';
 
 const DEFAULT_API_BASE_URL =
-  'https://ig-game-center-proxy-12702774477.us-west1.run.app';
+  'https://hex-api.xlythe.com';
 const DEFAULT_TIMEOUT_MS = 15_000;
 
 interface XmlSuccess {
@@ -93,7 +93,7 @@ export class IgGameCenterApi {
       || import.meta.env.VITE_IGGC_API_BASE_URL
       || DEFAULT_API_BASE_URL
     ).replace(/\/+$/, '');
-    this.fetchImplementation = options.fetchImplementation || fetch;
+    this.fetchImplementation = options.fetchImplementation || globalThis.fetch.bind(globalThis);
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
