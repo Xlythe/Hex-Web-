@@ -34,3 +34,110 @@
   --color-theme-button-icon-bg-hover-light: #f0f0f0;
   --color-theme-button-icon-bg-hover-dark: #3a3a3a;
 }
+
+/* Echo the Android game's charcoal canvas, bright route colors, and white
+   hexagons while leaving the existing dialog surfaces easy to read. */
+.hex-app-shell {
+  background: #303030;
+}
+
+.hex-game-card {
+  background: #303030;
+  color: #fff;
+  box-shadow: none;
+  border-radius: 0;
+  border-top: 7px solid #4a9cd2;
+}
+
+.hex-game-card h1,
+.hex-game-card > .flex:first-child button {
+  color: #fff;
+}
+
+.hex-game-card > .flex:first-child h1 {
+  font-weight: 400;
+  letter-spacing: .025em;
+}
+
+.hex-game-card > .text-center h2 {
+  color: #fff;
+}
+
+.hex-game-card > .text-center p,
+.hex-game-card > .text-sm.text-theme-text-subtle {
+  color: #d3d3d3;
+}
+
+.hex-game-card > .mt-10 button[aria-label] {
+  color: #fff;
+}
+
+.hex-turn-banner {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .5rem 1rem;
+  margin: .5rem 0 1rem;
+  padding: .65rem 1rem;
+  color: #fff;
+  border-left: 6px solid rgba(255,255,255,.55);
+}
+
+.hex-turn-banner strong {
+  font-size: 1.25rem;
+  line-height: 1.25;
+}
+
+.hex-turn-banner span {
+  font-size: .875rem;
+}
+
+.hex-turn-banner-red { background: #c85b56; }
+.hex-turn-banner-blue { background: #4a9cd2; }
+
+.hex-board {
+  background: #303030;
+  box-shadow: none;
+}
+
+.hex-board .hex-cell--empty {
+  background-color: #fff !important;
+}
+
+.hex-board > button {
+  color: #fff;
+}
+
+.hex-online-action {
+  color: #fff;
+}
+
+.hex-online-action-create { background: #596bb6; }
+.hex-online-action-create:hover { background: #475ba9; }
+.hex-online-action-browse { background: #f58a33; }
+.hex-online-action-browse:hover { background: #df7424; }
+
+@media (max-height: 500px) {
+  .hex-app-shell {
+    justify-content: flex-start !important;
+  }
+  .hex-game-card > .flex:first-child h1 {
+    font-size: 2rem;
+  }
+  .hex-game-card > .mt-1.mb-2.h-8,
+  .hex-game-card > .text-sm.text-theme-text-subtle:has(> p:empty) {
+    display: none;
+  }
+  .hex-turn-banner {
+    margin: .25rem 0 .5rem;
+  }
+  .hex-game-card > .mt-10 {
+    margin-top: .5rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .hex-app-shell {
+    justify-content: flex-start !important;
+  }
+}

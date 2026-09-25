@@ -743,7 +743,7 @@ const AppContent: React.FC = () => {
 
   const showMainGameControls = currentDisplayState.gamePhase === GamePhase.PLAYING && !currentDisplayState.isReplayActive && !currentDisplayState.swappedCellCoordinate && !needsLoginPromptForOnlinePlay && !isInWaitingRoom;
   const showFinishedReplayControls = currentDisplayState.gamePhase === GamePhase.GAME_OVER && !currentDisplayState.isReplayActive && currentDisplayState.gameBeingReplayedTimestamp !== null;
-  const showChat = gameOptions.player2ControlType === PlayerControlType.ONLINE && !!onlineGameSessionId && !isFullScreen && !currentDisplayState.isReplayActive;
+  const showChat = gameOptions.player2ControlType === PlayerControlType.ONLINE && !!onlineGameSessionId && !isInWaitingRoom && !isFullScreen && !currentDisplayState.isReplayActive;
   const showGameArea = !needsLoginPromptForOnlinePlay;
 
   const boardDisabledConditions = {
@@ -776,10 +776,10 @@ const AppContent: React.FC = () => {
     );
 
   return (
-    <div className={`min-h-screen flex flex-col items-center justify-center bg-theme-bg-light dark:bg-theme-bg-dark transition-all duration-300 ${isFullScreen ? 'p-0' : 'p-2 sm:p-4'}`}>
+    <div className={`hex-app-shell min-h-screen flex flex-col items-center justify-center bg-theme-bg-light dark:bg-theme-bg-dark transition-all duration-300 ${isFullScreen ? 'p-0' : 'p-2 sm:p-4'}`}>
       <div
         ref={gameCardRef}
-        className={`${isFullScreen
+        className={`hex-game-card ${isFullScreen
           ? 'fixed inset-0 z-[1000] w-screen h-screen flex flex-col items-stretch justify-center p-0 bg-theme-card-bg-light dark:bg-theme-card-bg-dark rounded-none shadow-none overflow-auto'
           : 'relative bg-theme-card-bg-light dark:bg-theme-card-bg-dark shadow-2xl rounded-xl p-4 sm:p-6 md:p-8 w-full max-w-2xl'
           } transition-all duration-300`}
@@ -809,6 +809,12 @@ const AppContent: React.FC = () => {
           <>
             <TimerDisplay currentDisplayState={currentDisplayState} gameController={gameController} gameOptions={gameOptions} getProfileForBoardSide={getProfileForBoardSide} getCurrentTurnParticipantProfile={getCurrentTurnParticipantProfile} isInWaitingRoom={isInWaitingRoom} isAiCurrentlyPlaying={isAiCurrentlyPlaying} />
             <StatusDisplay currentDisplayState={currentDisplayState} gameController={gameController} getProfileForBoardSide={getProfileForBoardSide} getCurrentTurnParticipantProfile={getCurrentTurnParticipantProfile} isInWaitingRoom={isInWaitingRoom} onlineGameStatusMessage={onlineGameStatusMessage} rematchOfferState={rematchOfferState} undoRequestState={undoRequestState} isAiCurrentlyPlaying={isAiCurrentlyPlaying} />
+            {!isInWaitingRoom && !currentDisplayState.isReplayActive && currentDisplayState.gamePhase === GamePhase.PLAYING && (
+              <div className={`hex-turn-banner ${currentDisplayState.currentPlayerId === Player.ONE ? 'hex-turn-banner-red' : 'hex-turn-banner-blue'}`} aria-live="polite">
+                <strong>{getCurrentTurnParticipantProfile().name}'s turn</strong>
+                <span>{currentDisplayState.currentPlayerId === Player.ONE ? 'Connect left to right' : 'Connect top to bottom'}</span>
+              </div>
+            )}
           </>
         )}
 
@@ -859,8 +865,8 @@ const AppContent: React.FC = () => {
               )}
               {showOnlineGameInitiationButtons && (
                 <>
-                  <button onClick={() => setIsCreateGameModalOpen(true)} disabled={isOnlineActionLoading || isAuthLoading} className={`px-6 py-3 font-semibold rounded-lg shadow-md hover:shadow-lg transition-all duration-150 ease-in-out focus:outline-none focus:ring-0 ${ (isOnlineActionLoading || isAuthLoading) ? 'bg-gray-400 text-gray-700 cursor-not-allowed' : 'bg-green-500 hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-700 text-white'}`}>Create Game</button>
-                  <button onClick={handleBrowseGamesClick} disabled={isOnlineActionLoading || isAuthLoading} className={`px-6 py-3 font-semibold rounded-lg shadow-md hover:shadow-lg transition-all duration-150 ease-in-out focus:outline-none focus:ring-0 bg-theme-button-secondary-bg-light hover:bg-theme-button-secondary-bg-light-hover dark:bg-theme-button-secondary-bg-dark dark:hover:bg-theme-button-secondary-bg-dark-hover text-theme-button-secondary-text-light dark:text-theme-button-secondary-text-dark disabled:opacity-50 disabled:cursor-not-allowed`}>Browse Games</button>
+                  <button onClick={() => setIsCreateGameModalOpen(true)} disabled={isOnlineActionLoading || isAuthLoading} className="hex-online-action hex-online-action-create px-6 py-3 font-semibold rounded-lg shadow-md hover:shadow-lg transition-all duration-150 ease-in-out focus:outline-none focus:ring-0 disabled:opacity-50 disabled:cursor-not-allowed">Create Game</button>
+                  <button onClick={handleBrowseGamesClick} disabled={isOnlineActionLoading || isAuthLoading} className="hex-online-action hex-online-action-browse px-6 py-3 font-semibold rounded-lg shadow-md hover:shadow-lg transition-all duration-150 ease-in-out focus:outline-none focus:ring-0 disabled:opacity-50 disabled:cursor-not-allowed">Browse Games</button>
                 </>
               )}
               {currentDisplayState.isReplayActive && (

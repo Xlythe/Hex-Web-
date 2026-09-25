@@ -235,6 +235,15 @@ const Board: React.FC<BoardProps> = ({
             availableHeightInWrapperContentBox = wRef.clientHeight - wrapperPaddingTop - wrapperPaddingBottom;
         }
 
+        // On a short landscape screen, leave room for the title, turn banner,
+        // and controls so players can see the complete board before scrolling.
+        if (!isFullScreen && window.innerHeight <= 500) {
+          availableHeightInWrapperContentBox = Math.min(
+            availableHeightInWrapperContentBox,
+            Math.max(145, window.innerHeight - 260),
+          );
+        }
+
 
         // Determine the scale factor to fit the original content into the available space.
         let newScale = 1;
@@ -348,7 +357,7 @@ const Board: React.FC<BoardProps> = ({
   const edgeIndicatorParentHeight = layoutProps.originalHeight;
 
   // Base CSS classes for the board wrapper.
-  const baseWrapperClasses = "relative block"; // `relative` for absolute positioning of fullscreen button and scalable content.
+  const baseWrapperClasses = "hex-board relative block"; // `relative` for absolute positioning of fullscreen button and scalable content.
   // Fullscreen specific classes: take full parent dimensions and apply a contrasting background.
   const fullscreenWrapperClasses = "w-full h-full bg-theme-divider-light dark:bg-theme-bg-dark";
   // Non-fullscreen classes: self-contained styling with padding, background, rounded corners, and shadow.

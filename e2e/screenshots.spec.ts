@@ -1,9 +1,9 @@
 import { expect, Page, test } from '@playwright/test';
 
 const screenshot = async (page: Page, name: string) => {
-  await page.evaluate(() => window.scrollTo(0, 0));
   await page.addStyleTag({
     content: `
+      html, body { overflow-anchor: none !important; }
       *, *::before, *::after {
         animation-duration: 0s !important;
         animation-delay: 0s !important;
@@ -12,6 +12,25 @@ const screenshot = async (page: Page, name: string) => {
       }
     `,
   });
+  await page.evaluate(() => {
+    // Reset after disabling animations and scroll anchoring, which can move a
+    // short landscape viewport when a dialog or waiting room replaces content.
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    document.scrollingElement?.scrollTo(0, 0);
+    window.scrollTo(0, 0);
+    document.getElementById('root')?.scrollTo(0, 0);
+  });
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  if ((page.viewportSize()?.height ?? Infinity) <= 500) {
+    await expect.poll(() => page.evaluate(() =>
+      document.getElementById('root')?.scrollTop ?? -1,
+    )).toBe(0);
+    await expect.poll(() => page.locator('.hex-game-card').evaluate(card =>
+      Math.round(card.getBoundingClientRect().top),
+    )).toBeGreaterThanOrEqual(0);
+  }
   const horizontalOverflow = await page.evaluate(
     () => document.documentElement.scrollWidth - window.innerWidth,
   );
@@ -135,6 +154,7 @@ test('create-game and waiting-room pages', async ({ page }) => {
 
   await page.getByTestId('submit-create-game-button').click();
   await expect(page.getByText(/Waiting Room: Game created/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open Chat' })).toHaveCount(1);
   await screenshot(page, 'waiting-room');
 });
 
@@ -147,6 +167,7 @@ test('online game and chat pages', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Open Chat' })).toBeVisible({
     timeout: 15_000,
   });
+  await expect(page.getByRole('button', { name: 'Open Chat' })).toHaveCount(1);
   await screenshot(page, 'online-game');
 
   await page.getByRole('button', { name: 'Open Chat' }).click();

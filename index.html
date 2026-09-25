@@ -37,7 +37,13 @@
       width: 100%;
       margin: 0;
       padding: 0;
-      overflow: hidden; /* Prevent scrollbars that might affect viewport calculation */
+    }
+    html, body {
+      overflow: hidden;
+    }
+    #root {
+      overflow-x: hidden;
+      overflow-y: auto;
     }
     body {
       font-family: 'Roboto', sans-serif;

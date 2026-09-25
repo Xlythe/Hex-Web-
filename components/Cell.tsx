@@ -84,7 +84,7 @@ const Cell: React.FC<CellProps> = ({
 }) => {
   const clipPathValue = 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)';
   
-  let cellClasses = `flex items-center justify-center text-white font-bold transition-all duration-200 ease-in-out focus:outline-none focus:ring-0`;
+  let cellClasses = `hex-cell flex items-center justify-center text-white font-bold transition-all duration-200 ease-in-out focus:outline-none focus:ring-0`;
   const cellStyle: React.CSSProperties = {
     width: CELL_WIDTH,
     height: CELL_HEIGHT,
@@ -142,7 +142,7 @@ const Cell: React.FC<CellProps> = ({
       cellClasses += ' cursor-default';
     }
   } else { // Empty cell
-    cellClasses += ' bg-gray-200 dark:bg-theme-card-bg-dark';
+    cellClasses += ' hex-cell--empty bg-gray-200 dark:bg-theme-card-bg-dark';
     // An empty cell is interactive if:
     // 1. It's not fundamentally disabled (baseDisabled from parent is false).
     // 2. The game is not over (winningPlayer is null).
