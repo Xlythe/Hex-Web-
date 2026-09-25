@@ -1265,6 +1265,7 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
 
     let timeoutId: number | undefined;
     let cancelled = false;
+    const streamAbort = new AbortController();
     const pollInterval = IGGC_POLL_INTERVAL_MS;
 
     const fetchData = async () => {
@@ -1395,9 +1396,15 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
     };
 
     void runPoll();
+    void api.subscribeEvents?.(
+      onlineGameSessionId, loggedInUser,
+      () => gameController.onlineOpponent?.lastEventId ?? '0',
+      () => { if (!cancelled) void fetchData(); }, streamAbort.signal,
+    );
 
     return () => {
       cancelled = true;
+      streamAbort.abort();
       if (timeoutId !== undefined) window.clearTimeout(timeoutId);
     };
   }, [

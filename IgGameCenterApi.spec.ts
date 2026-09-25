@@ -14,6 +14,28 @@ describe('IgGameCenterApi transport and XML parsing', () => {
     localStorage.clear();
   });
 
+  it('subscribes to mirror events with authorization outside the URL', async () => {
+    const fetchImplementation = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response('event: refresh\ndata: 5\n\n', {
+        headers: { 'Content-Type': 'text/event-stream' },
+      }),
+    );
+    const client = new IgGameCenterApi({ baseUrl: 'https://example.test', fetchImplementation });
+    const controller = new AbortController();
+    const onSignal = vi.fn(() => controller.abort());
+    await client.subscribeEvents('board-1', {
+      uid: 'alice', name: 'Alice', session_id: 'secret-token', expiryTimestamp: 0,
+    }, () => '4', onSignal, controller.signal);
+
+    expect(onSignal).toHaveBeenCalledOnce();
+    const [url, options] = fetchImplementation.mock.calls[0];
+    expect(url).toBe('https://example.test/events?sid=board-1&after=4');
+    expect(url).not.toContain('secret-token');
+    expect(options?.headers).toMatchObject({
+      Authorization: 'Bearer secret-token', 'X-Hex-Uid': 'alice',
+    });
+  });
+
   it('registers with the legacy plaintext password without logging credentials', async () => {
     const fetchImplementation = vi.fn<typeof fetch>().mockResolvedValue(xmlResponse(`
       <registrationResult>

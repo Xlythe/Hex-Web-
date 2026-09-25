@@ -10,6 +10,15 @@ rematches. SQLite stores all data in the `hex-data` Docker volume. Never remove
 that volume during an update. Run `python -m unittest discover -s mirror` and
 `python mirror/smoke.py` before deploying.
 
+The mirror also offers an authenticated `GET /events?sid=<room>&after=<event-id>`
+server-sent event stream. Pass `Authorization: Bearer <session-id>` and
+`X-Hex-Uid: <uid>` headers. A `refresh` event signals the client to fetch
+authoritative state through the existing POST/XML API. The web client keeps its
+15-second poll as a fallback. Streams reconnect periodically; each server
+process allows up to 64 subscribers. Sign-in and registration have per-IP and
+global rate limits. Set `HEX_TRUST_PROXY_IP=1` only when traffic reaches the
+service through a trusted proxy that supplies `CF-Connecting-IP`.
+
 The current deployment is `~/hex-mirror` on `ubuntu@charlotte-vm-1`, published
 on loopback port 8997 via `docker compose up -d --build`. The existing
 `xlythe-tunnel.service` Cloudflare tunnel routes `hex-api.xlythe.com` to that

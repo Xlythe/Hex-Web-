@@ -10,7 +10,8 @@ import {
   IgJoinRandomGameParams, IgJoinRandomGameResponse,
   IgCommandHandlerFullParams, IgCommandHandlerResponse, // Added IgCommandHandler types
   IgLobbyApiParams, IgLobbyResponse, // Added Lobby types
-  IgCreateBoardParams, IgCreateBoardResponse // Added Create Board types
+  IgCreateBoardParams, IgCreateBoardResponse, // Added Create Board types
+  LoggedInUser,
 } from './types';
 
 // Define a common interface that both RealApi and MockIgGameCenterApi implement
@@ -23,6 +24,10 @@ export interface IGameCenterApi {
   createBoardSession(params: IgCreateBoardParams): Promise<IgCreateBoardResponse>; // Added createBoardSession
   handleGameCommand(params: IgCommandHandlerFullParams, serverUrl: string): Promise<IgCommandHandlerResponse>; 
   fetchLobby(params: IgLobbyApiParams): Promise<IgLobbyResponse>; 
+  subscribeEvents?(
+    sid: string, user: LoggedInUser, lastEventId: () => string,
+    onSignal: () => void, signal: AbortSignal,
+  ): Promise<void>;
 }
 
 export const api: IGameCenterApi = DEBUG ? new MockIgGameCenterApi() : new RealApi();

@@ -5,21 +5,81 @@ SQLite write transactions; the board and move log remain authoritative here.
 """
 
 import hashlib
+import ipaddress
 import json
 import os
 import re
 import secrets
 import sqlite3
+import threading
 import time
+from collections import deque
 from contextlib import closing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlsplit
 from xml.etree import ElementTree as ET
 
 DB_PATH = os.environ.get("HEX_MIRROR_DB", "/data/hex.sqlite3")
 PORT = int(os.environ.get("PORT", "8997"))
 SERVER = "hex1"
 MAX_BODY = 8192
+TRUST_PROXY_IP = os.environ.get("HEX_TRUST_PROXY_IP") == "1"
+
+
+class RateLimiter:
+    """Bounded in-memory sliding-window limiter for expensive auth endpoints."""
+
+    def __init__(self, limit, window_seconds):
+        self.limit = limit
+        self.window_seconds = window_seconds
+        self.entries = {}
+        self.lock = threading.Lock()
+
+    def allow(self, key, stamp=None):
+        stamp = time.monotonic() if stamp is None else stamp
+        with self.lock:
+            # Keep the map bounded even if clients rotate source addresses.
+            if len(self.entries) > 4096:
+                self.entries = {item: hits for item, hits in self.entries.items()
+                                if hits and hits[-1] > stamp - self.window_seconds}
+            hits = self.entries.setdefault(key, deque())
+            while hits and hits[0] <= stamp - self.window_seconds:
+                hits.popleft()
+            if len(hits) >= self.limit:
+                return False
+            hits.append(stamp)
+            return True
+
+
+AUTH_BY_IP = RateLimiter(20, 60)
+AUTH_GLOBAL = RateLimiter(300, 60)
+
+
+class EventSignal:
+    def __init__(self):
+        self.condition = threading.Condition()
+        self.revisions = {}
+
+    def revision(self, sid):
+        with self.condition:
+            return self.revisions.get(sid, 0)
+
+    def publish(self, sids):
+        with self.condition:
+            for sid in sids:
+                self.revisions[sid] = self.revisions.get(sid, 0) + 1
+            if sids:
+                self.condition.notify_all()
+
+    def wait(self, sid, revision, timeout):
+        with self.condition:
+            self.condition.wait_for(lambda: self.revisions.get(sid, 0) > revision, timeout)
+            return self.revisions.get(sid, 0)
+
+
+EVENT_SIGNAL = EventSignal()
+CHANGED = threading.local()
+STREAM_SLOTS = threading.BoundedSemaphore(64)
 
 
 def now():
@@ -118,6 +178,8 @@ def auth(db, values):
 def emit(db, sid, uid, kind, data=""):
     db.execute("INSERT INTO events(sid,stamp,uid,type,data) VALUES(?,?,?,?,?)",
                (sid, now(), uid, kind, str(data)))
+    if hasattr(CHANGED, "sids"):
+        CHANGED.sids.add(sid)
 
 
 def game(db, sid):
@@ -433,6 +495,10 @@ def dispatch(db, path, values):
 
 
 class Handler(BaseHTTPRequestHandler):
+    def setup(self):
+        super().setup()
+        self.connection.settimeout(10)
+
     def log_message(self, format, *args):
         # Avoid logging form bodies, credentials, or session tokens.
         print("%s - %s" % (self.address_string(), format % args), flush=True)
@@ -440,26 +506,109 @@ class Handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Hex-Uid")
         self.end_headers()
 
     def do_GET(self):
-        if self.path == "/healthz":
+        parsed = urlsplit(self.path)
+        if parsed.path == "/healthz":
             self.send_response(200)
             self.send_header("Content-Type", "text/plain")
             self.end_headers()
             self.wfile.write(b"ok")
+        elif parsed.path == "/events":
+            self.stream_events(parsed.query)
         else:
             self.send_error(404)
 
+    def stream_events(self, query):
+        if not STREAM_SLOTS.acquire(blocking=False):
+            self.send_error(503, "Too many event subscribers")
+            return
+        try:
+            values = parse_qs(query)
+            sid = values.get("sid", [""])[-1]
+            try:
+                cursor = max(0, int(values.get("after", ["0"])[-1]))
+            except ValueError:
+                self.send_error(400, "Invalid event cursor")
+                return
+            bearer = self.headers.get("Authorization", "")
+            if not bearer.startswith("Bearer "):
+                self.send_error(401, "Sign in to subscribe")
+                return
+            try:
+                with closing(connect()) as db:
+                    user = auth(db, {"uid": self.headers.get("X-Hex-Uid", ""),
+                                     "session_id": bearer[7:]})
+                    member = db.execute("SELECT 1 FROM members WHERE sid=? AND uid=?",
+                                        (sid, user["uid"])).fetchone()
+            except ValueError:
+                self.send_error(401, "Invalid session")
+                return
+            except sqlite3.Error:
+                self.send_error(503, "Subscription unavailable")
+                return
+            if not member:
+                self.send_error(403, "Invalid subscription")
+                return
+
+            revision = EVENT_SIGNAL.revision(sid)
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache, no-transform")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("X-Accel-Buffering", "no")
+            self.end_headers()
+            self.wfile.write(b": connected\n\n")
+            self.wfile.flush()
+            deadline = time.monotonic() + 55
+            while time.monotonic() < deadline:
+                with closing(connect()) as db:
+                    latest = db.execute("SELECT MAX(eid) FROM events WHERE sid=?", (sid,)).fetchone()[0] or 0
+                if latest > cursor:
+                    cursor = latest
+                    self.wfile.write(f"event: refresh\ndata: {cursor}\n\n".encode())
+                    self.wfile.flush()
+                next_revision = EVENT_SIGNAL.wait(sid, revision,
+                                                  min(20, max(0, deadline - time.monotonic())))
+                if next_revision == revision:
+                    self.wfile.write(b": heartbeat\n\n")
+                    self.wfile.flush()
+                revision = next_revision
+        except (BrokenPipeError, ConnectionResetError, TimeoutError):
+            pass
+        finally:
+            STREAM_SLOTS.release()
+
     def do_POST(self):
+        client_ip = self.client_address[0]
+        if TRUST_PROXY_IP:
+            forwarded = self.headers.get("CF-Connecting-IP", "")
+            try:
+                client_ip = str(ipaddress.ip_address(forwarded))
+            except ValueError:
+                pass
+        if self.path in ("/api_login.php", "/api_user_add.php") and (
+                not AUTH_BY_IP.allow(client_ip) or not AUTH_GLOBAL.allow("all")):
+            body = error("Too many sign-in attempts. Please try again shortly.")
+            self.send_response(429)
+            self.send_header("Content-Type", "application/xml; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Retry-After", "60")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        changed = set()
         try:
             length = int(self.headers.get("Content-Length", "0"))
             if not 0 < length <= MAX_BODY:
                 raise ValueError("Request too large or empty.")
             parsed = parse_qs(self.rfile.read(length).decode("utf-8"), keep_blank_values=True)
             values = {key: value[-1] for key, value in parsed.items()}
+            CHANGED.sids = set()
             with closing(connect()) as db, db:
                 db.execute("BEGIN IMMEDIATE")
                 try:
@@ -467,8 +616,15 @@ class Handler(BaseHTTPRequestHandler):
                 except (ValueError, sqlite3.IntegrityError) as exc:
                     db.rollback()
                     body = error(str(exc))
+                else:
+                    changed = CHANGED.sids.copy()
         except (UnicodeError, ValueError, sqlite3.Error) as exc:
             body = error(str(exc))
+            changed = set()
+        finally:
+            if hasattr(CHANGED, "sids"):
+                del CHANGED.sids
+        EVENT_SIGNAL.publish(changed)
         self.send_response(200)
         self.send_header("Content-Type", "application/xml; charset=utf-8")
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -478,6 +634,35 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
+class LimitedHTTPServer(ThreadingHTTPServer):
+    daemon_threads = True
+    request_queue_size = 128
+
+    def __init__(self, *args, **kwargs):
+        self.slots = threading.BoundedSemaphore(128)
+        super().__init__(*args, **kwargs)
+
+    def process_request(self, request, client_address):
+        if not self.slots.acquire(blocking=False):
+            try:
+                request.sendall(b"HTTP/1.1 503 Service Unavailable\r\n"
+                                b"Content-Length: 0\r\nConnection: close\r\n\r\n")
+            finally:
+                self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self.slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self.slots.release()
+
+
 if __name__ == "__main__":
     init_db()
-    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
+    LimitedHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()

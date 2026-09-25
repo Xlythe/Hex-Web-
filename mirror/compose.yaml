@@ -2,6 +2,8 @@ services:
   hex-mirror:
     build: .
     restart: unless-stopped
+    environment:
+      HEX_TRUST_PROXY_IP: "1"
     ports:
       - "127.0.0.1:8997:8997"
     volumes:

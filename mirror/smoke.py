@@ -2,6 +2,7 @@
 
 import hashlib
 import secrets
+import time
 import urllib.parse
 import urllib.request
 from xml.etree import ElementTree as ET
@@ -49,7 +50,28 @@ def main():
     state = handler(alice, sid, "REFRESH")
     assert state.findtext("gameData/board") == "100000000"
     assert any(e.get("data") == "hello" for e in state.findall("eventList/event"))
-    print("PASS: two accounts, lobby, seats, start, turn, move, chat, persisted board over HTTPS")
+    cursor = max(int(e.get("eid")) for e in state.findall("eventList/event"))
+    query = urllib.parse.urlencode({"sid": sid, "after": cursor})
+    request = urllib.request.Request(BASE + "/events?" + query, headers={
+        "Authorization": "Bearer " + alice["session_id"],
+        "X-Hex-Uid": alice["uid"],
+        "User-Agent": "HexMirrorSmoke/1.0",
+    })
+    try:
+        stream = urllib.request.urlopen(request, timeout=10)
+    except urllib.error.HTTPError as failure:
+        raise AssertionError(f"Event stream HTTP {failure.code}: {failure.read()[:300]!r}") from failure
+    with stream:
+        assert stream.status == 200
+        assert stream.readline() == b": connected\n"
+        assert stream.readline() == b"\n"
+        started = time.monotonic()
+        handler(bob, sid, "MSG", message="stream check")
+        assert stream.readline() == b"event: refresh\n"
+        received = stream.readline().decode().strip()
+        assert int(received.removeprefix("data: ")) > cursor
+        assert time.monotonic() - started < 5, "Event stream was delayed"
+    print("PASS: two accounts, lobby, seats, start, turn, move, chat, persisted board, live stream over HTTPS")
 
 
 if __name__ == "__main__":

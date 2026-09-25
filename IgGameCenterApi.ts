@@ -25,6 +25,7 @@ import {
   IgUserUpdateSuccessResponse,
   LobbyGameSession,
   LobbyGameSessionMember,
+  LoggedInUser,
   PlayerStat,
 } from './types';
 import { getOrGenerateNetworkUid, md5 } from './utils';
@@ -95,6 +96,66 @@ export class IgGameCenterApi {
     ).replace(/\/+$/, '');
     this.fetchImplementation = options.fetchImplementation || globalThis.fetch.bind(globalThis);
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  }
+
+  /** Optional mirror event stream. Existing POST/XML polling remains the fallback. */
+  public async subscribeEvents(
+    sid: string, user: LoggedInUser, lastEventId: () => string,
+    onSignal: () => void, signal: AbortSignal,
+  ): Promise<void> {
+    let failures = 0;
+    while (!signal.aborted) {
+      try {
+        const query = new URLSearchParams({ sid, after: lastEventId() });
+        const response = await this.fetchImplementation(`${this.baseUrl}/events?${query}`, {
+          headers: {
+            Accept: 'text/event-stream',
+            Authorization: `Bearer ${user.session_id}`,
+            'X-Hex-Uid': user.uid,
+          },
+          signal,
+        });
+        if (response.status === 404 || response.status === 405) return;
+        if (!response.ok || !response.body) throw new Error('Event stream unavailable');
+        failures = 0;
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let pending = '';
+        let eventName = '';
+        try {
+          while (!signal.aborted) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            pending += decoder.decode(value, { stream: true });
+            let newline = pending.indexOf('\n');
+            while (newline >= 0) {
+              const line = pending.slice(0, newline).replace(/\r$/, '');
+              pending = pending.slice(newline + 1);
+              if (line.startsWith('event:')) eventName = line.slice(6).trim();
+              else if (line === '') {
+                if (eventName === 'refresh') onSignal();
+                eventName = '';
+              }
+              newline = pending.indexOf('\n');
+            }
+          }
+        } finally {
+          await reader.cancel().catch(() => undefined);
+        }
+      } catch {
+        if (signal.aborted) return;
+        failures++;
+      }
+      if (signal.aborted) return;
+      await new Promise<void>(resolve => {
+        const timer = window.setTimeout(() => {
+          signal.removeEventListener('abort', stop);
+          resolve();
+        }, Math.min(30_000, 1000 * 2 ** Math.min(failures, 5)));
+        const stop = () => { window.clearTimeout(timer); resolve(); };
+        signal.addEventListener('abort', stop, { once: true });
+      });
+    }
   }
 
   private commonParams(
