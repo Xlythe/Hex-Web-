@@ -150,4 +150,17 @@ describe('IgGameCenterApi transport and XML parsing', () => {
     });
     expect(fetchImplementation).toHaveBeenCalledTimes(2);
   });
+
+  it('reports an unavailable login endpoint before trying to parse its HTML error page', async () => {
+    const fetchImplementation = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response('<html><body>Not found</body></html>', { status: 404 }),
+    );
+    const client = new IgGameCenterApi({
+      baseUrl: 'https://example.test',
+      fetchImplementation,
+    });
+
+    await expect(client.loginUser({ login: 'Alice', password: 'hunter2' }))
+      .resolves.toMatchObject({ error: true, httpStatusCode: 404, message: 'HTTP 404: Request failed' });
+  });
 });

@@ -91,6 +91,10 @@ Use `pnpm test:screenshots:update` only after reviewing an intentional UI
 change. Golden images are stored below `e2e/__screenshots__` and are separated
 by browser and operating system because font rendering is platform-specific.
 
+`pnpm test:online:smoke` checks that the configured live login API is reachable
+without creating an account. A passing mock suite cannot confirm that the
+external service is available.
+
 Run the complete local quality gate—ESLint with zero warnings, TypeScript,
 tests, and the production build—with:
 

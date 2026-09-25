@@ -134,6 +134,13 @@ export class IgGameCenterApi {
         signal: controller.signal,
       });
       rawText = await response.text();
+      if (!response.ok) {
+        return this.error(
+          `HTTP ${response.status}: ${response.statusText || 'Request failed'}`,
+          undefined,
+          response,
+        );
+      }
       const document = new DOMParser().parseFromString(rawText, 'application/xml');
       const parseError = document.querySelector('parsererror');
       if (parseError) {
@@ -141,7 +148,7 @@ export class IgGameCenterApi {
       }
 
       const apiError = text(document, 'errorMessage');
-      if (!response.ok || apiError) {
+      if (apiError) {
         return this.error(
           apiError || `HTTP ${response.status}: ${response.statusText || 'Request failed'}`,
           rawText,
