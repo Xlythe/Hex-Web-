@@ -298,7 +298,7 @@ def response(db, values, user, current):
         ending = db.execute("SELECT data FROM events WHERE sid=? AND type='ENDGAME' ORDER BY eid DESC LIMIT 1", (sid,)).fetchone()
         if ending:
             tag(data, "ending", ending[0])
-    if values.get("cmd", "").upper() in ("UNDO", "REFRESH"):
+    if current["status"] == "FINISHED" or values.get("cmd", "").upper() in ("UNDO", "REFRESH"):
         moves = db.execute("SELECT coordinate FROM moves WHERE sid=? ORDER BY move_index", (sid,))
         tag(data, "moves", ",".join(row[0] for row in moves))
     options = tag(root, "gameOptions", None)

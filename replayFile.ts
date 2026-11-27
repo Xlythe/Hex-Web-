@@ -91,6 +91,8 @@ export function readReplay(text: string): CompletedGameEntry {
   check(Number.isFinite(timer.additionalTime) && timer.additionalTime >= 0);
   timerSettings.incrementSeconds = ALLOWED_INCREMENT_SECONDS.find(seconds => seconds === timer.additionalTime / 1000);
   if (file.result) {
+    if (path) check(file.result.winner === moves[moves.length - 1].team);
+    if (file.result.reason === WinReason.CONNECTION) check(path);
     check([null, 1, 2].includes(file.result.winner) && (file.result.reason === null || Object.values(WinReason).includes(file.result.reason)));
   }
   const end = file.gameEnd || file.gameStart;

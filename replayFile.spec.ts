@@ -38,6 +38,8 @@ describe('Android replay exchange', () => {
   it('rejects corrupt or incomplete history', () => {
     const edits: Array<(doc: Replay) => void> = [
       doc => { doc.formatVersion = 2; },
+      doc => { doc.result = { winner: Player.TWO, reason: WinReason.CONNECTION }; },
+      doc => { doc.result = { winner: Player.ONE, reason: WinReason.CONNECTION }; doc.moveList.moveList = []; },
       doc => { doc.gameOptions.gridSize = 100000; },
       doc => { doc.moveList.moveList[1].x = -1; },
       doc => { doc.moveList.moveList[1].team = 1; },

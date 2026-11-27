@@ -168,6 +168,14 @@ class MirrorTest(unittest.TestCase):
             self.assertEqual(expected, tuple(stats.get(key) for key in ("numWin", "numLoss", "score")))
             self.assertEqual("1", stats.get("numGames"))
 
+    def test_full_board_has_one_winner_and_only_edge_adjacency_counts(self):
+        for mask in range(512):
+            board = "".join("1" if mask & (1 << cell) else "2" for cell in range(9))
+            self.assertNotEqual(server.board_won(board, 3, 1), server.board_won(board, 3, 2), board)
+        self.assertFalse(server.board_won("100010001", 3, 1))
+        self.assertTrue(server.board_won("001010100", 3, 1))
+        self.assertTrue(server.board_won("002020200", 3, 2))
+
     def test_auth_requests_are_rate_limited_over_http(self):
         server.AUTH_BY_IP = server.RateLimiter(20, 60)
         web = server.LimitedHTTPServer(("127.0.0.1", 0), QuietHandler)

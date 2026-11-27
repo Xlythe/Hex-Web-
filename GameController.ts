@@ -534,7 +534,8 @@ export class GameController {
   }
 
   private async executeSwap(): Promise<void> {
-    if (!this.firstGameMoveDetails) return;
+    if (!this.firstGameMoveDetails || !this.options.swapRuleEnabled || this.turnCount !== 1
+        || this.currentPlayerId !== Player.TWO || this.gamePhase !== GamePhase.PLAYING) return;
     const playerInitiatingSwapDecision = this.currentPlayerId;
     if (
       this.options.player2ControlType === PlayerControlType.ONLINE
@@ -639,7 +640,10 @@ export class GameController {
     this.gamePhase = GamePhase.GAME_OVER;
     if (this.activeTimerIntervalId) clearInterval(this.activeTimerIntervalId); this.activeTimerIntervalId = null;
     this.cancelAiSearch();
-    this.winner = wonPlayerSide; this.winReason = reason; this.winningPath = path;
+    this.winner = wonPlayerSide;
+    this.winReason = reason;
+    this.winningPath = wonPlayerSide && reason === WinReason.CONNECTION
+      ? path ?? this.checkForWin(wonPlayerSide) : null;
     this.notifyUpdate();
   }
   

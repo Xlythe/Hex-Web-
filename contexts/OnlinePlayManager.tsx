@@ -581,6 +581,13 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
         ))) {
           reason = WinReason.CLAIMED;
         }
+        if (reason === WinReason.CONNECTION && successResponse.gameData?.board) {
+          const currentBoard = gameController.boardMatrix.flat().map(cell => cell ?? 0).join('');
+          if (currentBoard !== successResponse.gameData.board) {
+            gameController.reinitializeFromOnlineState(successResponse.gameData.board, successResponse.playerList || [],
+              successResponse.sessionInfo, successResponse.gameData.moves);
+          }
+        }
         gameController.endGame(winnerPlayerSide, reason, null);
       }
     },

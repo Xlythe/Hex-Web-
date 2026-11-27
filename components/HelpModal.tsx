@@ -51,7 +51,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose, player1Color, pl
               {/* Player 2's objective, styled with their specific color. */}
               <li><span className="font-semibold" style={{color: player2Color}}>Player 2</span> aims to create an unbroken chain of their pieces connecting the Top edge to the Bottom edge of the board.</li>
             </ul>
-            <p className="mt-1 text-theme-text-subtle">The first player to complete their chain wins. Corners are considered part of both adjacent edges.</p>
+            <p className="mt-1 text-theme-text-subtle">The first player to complete their chain wins. Corner cells touch both adjacent edges. A full board always has a winner.</p>
           </section>
           <hr className="border-theme-divider-light dark:border-theme-divider-dark"/>
           {/* Swap Rule Section */}
@@ -63,14 +63,9 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose, player1Color, pl
               <li>Player 2 then has a choice for their first turn:
                 <ul className="list-circle list-inside ml-4 mt-1">
                     <li>Place their own piece on any other empty cell. The game continues normally.</li>
-                    <li><strong>OR:</strong> Click on Player 1's first piece. This invokes the swap:
-                        <ul className="list-disc list-inside ml-4 mt-1">
-                            {/* Swap details, using player colors for clarity. */}
-                            <li>Player 2 takes on the role of Player 1 (controlling the <span style={{color: player1Color, fontWeight: 'normal'}}>first player's side/pieces</span>), and Player 1's first move is now considered their own.</li>
-                            <li>Player 1 takes on the role of Player 2 (controlling the <span style={{color: player2Color, fontWeight: 'normal'}}>second player's side/pieces</span>).</li>
-                            <li>The next turn belongs to the new Player 2 (who was originally Player 1).</li>
-                        </ul>
-                    </li>
+                    <li>Select the opening stone to swap. It becomes Player 2’s color and
+                      moves to its reflected cell across the board diagonal. For example, B1
+                      becomes A2. A stone on the diagonal stays in place. Player 1 moves next.</li>
                 </ul>
               </li>
             </ul>
