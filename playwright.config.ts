@@ -8,7 +8,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? 'github' : 'list',
   snapshotPathTemplate:
-    '{testDir}/__screenshots__/{testFilePath}/{arg}-{projectName}-{platform}{ext}',
+    '{testDir}/__screenshots__/{testFilePath}/{arg}-{projectName}{ext}',
   expect: {
     timeout: 10_000,
     toHaveScreenshot: {
@@ -19,7 +19,7 @@ export default defineConfig({
     },
   },
   use: {
-    baseURL: 'http://127.0.0.1:4173',
+    baseURL: process.env.HEX_TEST_SITE || 'http://127.0.0.1:4173',
     colorScheme: 'light',
     locale: 'en-US',
     timezoneId: 'UTC',
@@ -53,7 +53,7 @@ export default defineConfig({
       },
     },
   ],
-  webServer: {
+  webServer: process.env.HEX_TEST_SITE ? undefined : {
     command: 'pnpm dev --host 127.0.0.1 --port 4173',
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: !process.env.CI && process.env.VITE_USE_REAL_API !== 'true',

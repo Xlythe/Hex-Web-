@@ -1,7 +1,7 @@
 import { CompletedGameEntry, GamePhase, Player, BoardMatrix, Coordinate, PlayerProfile, FirstGameMoveDetails, HistoryEntry, TimerMode, WinReason, TimerSettings } from './types';
 import { REPLAY_STEP_DELAY_MS } from './Constants';
 import { createEmptyBoard } from './utils';
-import { MIN_BOARD_SIZE, MAX_BOARD_SIZE, DEFAULT_BOARD_SIZE } from './Constants';
+import { MIN_BOARD_SIZE, DEFAULT_BOARD_SIZE } from './Constants';
 
 /**
  * @interface ReplaySnapshot
@@ -275,7 +275,7 @@ export class ReplayService {
         // wPath = currentHistoryEntry.winningPath; // Initial assignment from history
     } else { 
         // No current history entry (e.g., currentStepIndex is -1, showing state before first move)
-        board = createEmptyBoard(gameData.settings.boardSize, MIN_BOARD_SIZE, MAX_BOARD_SIZE, DEFAULT_BOARD_SIZE);
+        board = createEmptyBoard(gameData.settings.boardSize, MIN_BOARD_SIZE, 30, DEFAULT_BOARD_SIZE);
         const firstHistEntryIfAvailable = history.length > 0 ? history[0] : null;
         // Default to Player.ONE or first history entry's player if showing pre-game state
         cPlayerId = firstHistEntryIfAvailable ? firstHistEntryIfAvailable.currentPlayer : Player.ONE; 

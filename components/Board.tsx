@@ -1,3 +1,4 @@
+import { CELL_WIDTH_PX, CELL_HEIGHT_PX } from './cellSize';
 
 import React, { useRef, useState, useEffect, useLayoutEffect } from 'react';
 import { BoardMatrix, Player, Coordinate, FirstGameMoveDetails } from '../types';
@@ -100,10 +101,6 @@ interface BoardProps {
 // These constants define the base size and relative positioning of individual hexagonal cells.
 // They are used to calculate the overall dimensions of the board before scaling.
 
-/** Base width of a single hexagonal cell in pixels. */
-const CELL_WIDTH_PX = 36;
-/** Base height of a single hexagonal cell in pixels. */
-const CELL_HEIGHT_PX = 31;
 /**
  * Vertical overlap between rows of hexagons.
  * For a pointy-topped hexagon, this is 1/4 of the cell height, leading to rows interlocking.
@@ -238,10 +235,7 @@ const Board: React.FC<BoardProps> = ({
         // On a short landscape screen, leave room for the title, turn banner,
         // and controls so players can see the complete board before scrolling.
         if (!isFullScreen && window.innerHeight <= 500) {
-          availableHeightInWrapperContentBox = Math.min(
-            availableHeightInWrapperContentBox,
-            Math.max(145, window.innerHeight - 260),
-          );
+          availableHeightInWrapperContentBox = Math.max(145, window.innerHeight * .78);
         }
 
 

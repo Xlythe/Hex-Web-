@@ -1,8 +1,22 @@
 # Hex Online Board Game
 
+[Play Hex on the web](https://hex.xlythe.com). Android and web players share
+Xlythe accounts, matchmaking, moves and chat. Both sign-in screens also link to
+igGameCenter's independent browser lobby, which uses its own accounts. A room
+started on one service stays there.
+
+Choose **Replay** to import a `.rhex` file or export a saved game. On Android
+these actions are under **History**. Both clients accept unversioned Android
+saves and version 1 documents. Browser exports include move order, swap,
+colors, timers and the recorded outcome. Historical files without an outcome
+can identify a winner by a connected path.
+
+
 "Hex Online" is a modern and interactive web-based implementation of the classic two-player connection game, Hex. Players alternate turns placing their pieces on a hexagonal grid, aiming to connect their assigned sides of the board – Player 1 (e.g., Red) connects Left to Right, and Player 2 (e.g., Blue) connects Top to Bottom. The first to complete their chain wins.
 
 This application is built with React and TypeScript, styled with Tailwind CSS, and offers a rich user experience.
+
+![Landscape menu and board on Android and web](docs/landscape-comparison.webp)
 
 ## Features
 
@@ -89,8 +103,9 @@ pnpm test:screenshots
 ```
 
 Use `pnpm test:screenshots:update` only after reviewing an intentional UI
-change. Golden images are stored below `e2e/__screenshots__` and are separated
-by browser and operating system because font rendering is platform-specific.
+change. The reference renderer is Chrome on Ubuntu. The three viewport baselines in
+`e2e/__screenshots__` use this renderer so font differences between operating
+systems do not obscure layout changes. Use Ubuntu to update or compare them.
 
 `pnpm test:online:smoke` checks that the configured live login API is reachable
 without creating an account. A passing mock suite cannot confirm that the
@@ -308,3 +323,10 @@ pnpm check
    See the License for the specific language governing permissions and
    limitations under the License.
 ```
+
+The wheel icons come from the Xlythe Android app and are subject to the image
+terms in that project's README. The browser bundles its board music, stone
+sound and message chime so playback works without signing in to a storage service.
+
+[Build a Hex player](docs/hex-ai.md) walks through a playable position and
+the existing Java and TypeScript tree-search implementations.

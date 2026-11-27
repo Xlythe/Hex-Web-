@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { CLICK_SOUND_URL } from '../Constants'; // Assuming CLICK_SOUND_URL is defined in Constants
 
-const MESSAGE_CHIME_SOUND_URL = 'https://storage.cloud.google.com/hex-game-assets/hex_msg_chime.mp3';
+const MESSAGE_CHIME_SOUND_URL = new URL('../audio/chat.mp3', import.meta.url).href;
 
 interface UseSoundEffectsProps {
   isGloballyEnabled: boolean; // Controls if sounds play

@@ -2,6 +2,7 @@ import hashlib
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 from contextlib import closing
 from concurrent.futures import ThreadPoolExecutor
 from threading import Thread
@@ -64,6 +65,7 @@ class MirrorTest(unittest.TestCase):
         self.handler(self.first, sid, "UNDO", type="ASK", move_ind="1")
         undone = self.handler(self.second, sid, "UNDO", type="ACCEPT")
         self.assertEqual(undone.findtext("gameData/board"), "100000000")
+        self.assertEqual(undone.findtext("gameData/moves"), "A1")
         self.assertEqual(undone.find("memberInfo").get("active"), "1")
         with closing(server.connect()) as db:
             self.assertEqual(server.game(db, sid)["board"], "100000000")
@@ -107,6 +109,64 @@ class MirrorTest(unittest.TestCase):
         self.assertEqual(self.handler(self.second, rematch).find("memberInfo").get("place"), "2")
         repeated = self.handler(self.first, sid, "RESTART")
         self.assertEqual(next(e.get("data") for e in repeated.findall("eventList/event") if e.get("type") == "RESTART"), rematch)
+
+    def test_stale_rooms_and_repeated_matchmaking(self):
+        def random(user):
+            return self.call("/api_board_random.php", **user, gid="12").findtext("sid")
+
+        first = random(self.first)
+        self.assertEqual(first, random(self.first))
+        with closing(server.connect()) as db, db:
+            db.execute("UPDATE members SET last_seen=0 WHERE sid=?", (first,))
+        self.assertIsNone(self.call("/api_board_list.php", **self.second).find(".//session"))
+        self.assertNotEqual(first, random(self.second))
+
+    def test_spectator_departure_and_winning_move_delivery(self):
+        sid = self.call("/api_board_create.php", **self.first).findtext("sid")
+        self.handler(self.first, sid, "SETUP", boardSize="3")
+        spectator = self.account("Spectator")
+        self.handler(spectator, sid)
+        self.handler(self.second, sid)
+        self.handler(self.second, sid, "PLACE", place="2")
+        self.handler(self.first, sid, "START")
+        self.handler(self.second, sid, "START")
+        self.handler(self.first, sid, "MOVE", move="A1")
+        with self.assertRaises(ValueError):
+            self.handler(spectator, sid, "UNDO", type="ASK", move_ind="0")
+        self.assertEqual("ACTIVE", self.handler(spectator, sid, "LEAVE").find("sessionInfo").get("status"))
+        for user, move in [(self.second, "A2"), (self.first, "B1"), (self.second, "B2"), (self.first, "C1")]:
+            state = self.handler(user, sid, "MOVE", move=move)
+        self.assertEqual(["MOVE", "ENDGAME"], [e.get("type") for e in state.findall("eventList/event")][-2:])
+        with self.assertRaises(ValueError):
+            self.handler(self.first, sid, "UNDO", type="ASK", move_ind="0")
+
+    def test_clock_increment_undo_timeout_and_profile_after_reconnect(self):
+        sid = self.call("/api_board_create.php", **self.first).findtext("sid")
+        self.handler(self.first, sid, "SETUP", boardSize="3", timerTotal="30", timerInc="5", scored="1")
+        self.handler(self.second, sid)
+        self.handler(self.second, sid, "PLACE", place="2")
+        with patch.object(server.time, "time_ns", return_value=100_000_000_000) as clock:
+            self.handler(self.first, sid, "START")
+            self.handler(self.second, sid, "START")
+            clock.return_value += 3_000_000_000
+            state = self.handler(self.first, sid, "MOVE", move="B1")
+            first = state.find("playerList/player[@place='1']")
+            self.assertEqual("32", first.get("timerLeft"))
+            self.handler(self.second, sid, "MOVE", move="SWAP")
+            self.handler(self.second, sid, "UNDO", type="ASK", move_ind="1")
+            state = self.handler(self.first, sid, "UNDO", type="ACCEPT")
+            self.assertEqual("B1", state.findtext("gameData/moves"))
+            self.assertEqual("30", state.find("playerList/player[@place='2']").get("timerLeft"))
+            clock.return_value += 30_000_000_000
+            state = self.handler(self.second, sid, "MOVE", move="SWAP")
+            self.assertEqual("FINISHED", state.find("sessionInfo").get("status"))
+            self.assertEqual("TIMEOUT", state.findall("eventList/event")[-1].get("data"))
+            self.assertEqual("B1", self.handler(self.first, sid, "REFRESH").findtext("gameData/moves"))
+            self.handler(self.first, sid, "LEAVE")
+        for user, expected in [(self.first, ("1", "0", "1516")), (self.second, ("0", "1", "1484"))]:
+            stats = self.call("/api_profile.php", **user).find("profile/gameStat/game")
+            self.assertEqual(expected, tuple(stats.get(key) for key in ("numWin", "numLoss", "score")))
+            self.assertEqual("1", stats.get("numGames"))
 
     def test_auth_requests_are_rate_limited_over_http(self):
         server.AUTH_BY_IP = server.RateLimiter(20, 60)

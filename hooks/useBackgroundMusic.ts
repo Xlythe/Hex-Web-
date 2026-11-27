@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { safeStorageJson, safeStorageSet } from '../storage';
 
 const MUSIC_STORAGE_KEY = 'hexGameMusicEnabledV1'; // Added V1 for potential future preference changes
-const MUSIC_URL = 'https://storage.cloud.google.com/hex-game-assets/hex_bg_music.mp3';
+const MUSIC_URL = new URL('../audio/board.mp3', import.meta.url).href;
 const DEFAULT_VOLUME = 0.3;
 const FADE_INTERVAL_MS = 50;
 const FADE_STEP = 0.05;

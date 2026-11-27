@@ -1,3 +1,6 @@
+import type { SearchRequest } from './ai.worker';
+import { serverHistory } from './replayFile';
+import { winningPath } from './winningPath';
 
 import {
   Player, CellState, BoardMatrix, GamePhase, Coordinate, TimerSettings, WinReason,
@@ -88,6 +91,7 @@ export class GameController {
   /** Interval ID for the active game timer, used for clearing. */
   private activeTimerIntervalId: number | null = null;
   /** Timeout ID for the AI's "thinking" delay, used for clearing. */
+  private aiWorker: Worker | null = null;
   private aiMoveTimeoutId: number | null = null;
 
   // --- History & Metadata ---
@@ -220,9 +224,7 @@ export class GameController {
   public startGame(serverConfirmedOptions?: IgHandlerGameOptions): void {
     if (this.activeTimerIntervalId) clearInterval(this.activeTimerIntervalId);
     this.activeTimerIntervalId = null;
-    if (this.aiMoveTimeoutId) clearTimeout(this.aiMoveTimeoutId);
-    this.aiMoveTimeoutId = null;
-    this.setAiThinking(false);
+    this.cancelAiSearch();
 
     let currentBoardSize = this.options.boardSize;
     const currentTimerSettings = { ...this.options.timerSettings };
@@ -422,8 +424,9 @@ export class GameController {
         return; // Invalid move
     }
 
-    // Do NOT record for local undo history for opponent online moves; server is truth.
+    this.recordCurrentStateForUndo();
     const newBoard = this.boardMatrix.map(r => [...r]);
+    if (this.turnCount === 0) this.firstGameMoveDetails = { coord: { r: row, c: col }, player: this.currentPlayerId };
     newBoard[row][col] = this.currentPlayerId; // currentPlayerId is opponent's ID here when this is called
     this.boardMatrix = newBoard;
     this.turnCount++;
@@ -462,6 +465,14 @@ export class GameController {
     }
   }
   
+  private cancelAiSearch(): void {
+    if (this.aiMoveTimeoutId !== null) clearTimeout(this.aiMoveTimeoutId);
+    this.aiMoveTimeoutId = null;
+    this.aiWorker?.terminate();
+    this.aiWorker = null;
+    this.setAiThinking(false);
+  }
+
   private checkAndTriggerAiMove(): void {
     if (this.options.player2ControlType === PlayerControlType.ONLINE) return;
     if (this.isAiTurn() && !this.isAiCurrentlyThinking) {
@@ -477,18 +488,47 @@ export class GameController {
         const aiCanSwap = this.options.swapRuleEnabled && this.turnCount === 1
           && this.firstGameMoveDetails !== null
           && aiControlledSide !== this.firstGameMoveDetails.player;
-        const move = this.aiPlayer!.getMove(this.boardMatrix, aiControlledSide, aiCanSwap);
-        this.setAiThinking(false); // AI finished thinking
-        if (move && aiCanSwap && this.firstGameMoveDetails
-            && move.r === this.firstGameMoveDetails.coord.r
-            && move.c === this.firstGameMoveDetails.coord.c) {
-          void this.executeSwap();
+        const board = this.boardMatrix;
+        const applyMove = (move: Coordinate | null) => {
+          if (this.boardMatrix !== board || !this.isAiTurn()) return;
+          this.setAiThinking(false); // AI finished thinking
+          if (move && aiCanSwap && this.firstGameMoveDetails
+              && move.r === this.firstGameMoveDetails.coord.r
+              && move.c === this.firstGameMoveDetails.coord.c) {
+            void this.executeSwap();
+            return;
+          }
+          if (move && this.boardMatrix[move.r][move.c] === null) this.processValidMove(move.r, move.c);
+          else if (move && DEBUG) console.warn("AI chose invalid cell:", move);
+          else if (DEBUG) console.warn("AI no move.");
+        };
+        const fallback = () => applyMove(this.aiPlayer!.getMove(board, aiControlledSide, aiCanSwap));
+        if (typeof Worker === 'undefined') {
+          fallback();
           return;
         }
-        if (move && this.boardMatrix[move.r][move.c] === null) this.processValidMove(move.r, move.c);
-        else if (move && DEBUG) console.warn("AI chose invalid cell:", move);
-        else if (DEBUG) console.warn("AI no move.");
-        // After AI's move, processValidMove will call startTimerIfNeeded, which will start it for human
+        try {
+          const worker = new Worker(new URL('./ai.worker.ts', import.meta.url), { type: 'module' });
+          this.aiWorker = worker;
+          worker.onmessage = (event: MessageEvent<Coordinate | null>) => {
+            if (worker !== this.aiWorker) return;
+            worker.terminate();
+            this.aiWorker = null;
+            applyMove(event.data);
+          };
+          worker.onerror = () => {
+            if (worker !== this.aiWorker) return;
+            worker.terminate();
+            this.aiWorker = null;
+            fallback();
+          };
+          worker.postMessage({ board, side: aiControlledSide, canSwap: aiCanSwap,
+            difficulty: this.options.aiDifficulty } satisfies SearchRequest);
+        } catch {
+          this.aiWorker?.terminate();
+          this.aiWorker = null;
+          fallback();
+        }
       }, AI_THINKING_DELAY_MS) as unknown as number;
     }
   }
@@ -559,7 +599,7 @@ export class GameController {
   public undoMove(): void { // This is for local/AI undo
     if (!this.canUndo()) return;
     if (this.activeTimerIntervalId) clearInterval(this.activeTimerIntervalId); this.activeTimerIntervalId = null;
-    if (this.aiMoveTimeoutId) clearTimeout(this.aiMoveTimeoutId); this.aiMoveTimeoutId = null; this.setAiThinking(false);
+    this.cancelAiSearch();
 
     const restoreStateFromRecord = (prevState: MoveRecord) => {
         this.boardMatrix = prevState.boardMatrix.map(row => [...row]); // Ensure deep copy
@@ -587,53 +627,8 @@ export class GameController {
     }
   }
   
-  private getNeighbors(r: number, c: number): Coordinate[] {
-    const potentialNeighborCoords: Array<[number, number]> = [
-      [r, c - 1], [r, c + 1], [r - 1, c], [r - 1, c + 1], [r + 1, c], [r + 1, c - 1],
-    ];
-    const neighbors: Coordinate[] = [];
-    for (const [nr, nc] of potentialNeighborCoords) {
-      if (nr >= 0 && nr < this.options.boardSize && nc >= 0 && nc < this.options.boardSize) {
-        neighbors.push({ r: nr, c: nc });
-      }
-    }
-    return neighbors;
-  }
-
   public checkForWin(playerSide: Player): Coordinate[] | null {
-    const size = this.options.boardSize;
-    if (size === 0) return null;
-    const visited = Array.from({ length: size }, () => Array<boolean>(size).fill(false));
-    const parent = Array.from({ length: size }, () => Array<Coordinate | null>(size).fill(null));
-    const queue: Coordinate[] = [];
-    for (let index = 0; index < size; index++) {
-      const start = playerSide === Player.ONE ? { r: index, c: 0 } : { r: 0, c: index };
-      if (this.boardMatrix[start.r][start.c] === playerSide) {
-        visited[start.r][start.c] = true;
-        queue.push(start);
-      }
-    }
-    for (let head = 0; head < queue.length; head++) {
-      const cell = queue[head];
-      if ((playerSide === Player.ONE && cell.c === size - 1) ||
-          (playerSide === Player.TWO && cell.r === size - 1)) {
-        const path: Coordinate[] = [];
-        let current: Coordinate | null = cell;
-        while (current) {
-          path.push(current);
-          current = parent[current.r][current.c];
-        }
-        return path.reverse();
-      }
-      for (const neighbor of this.getNeighbors(cell.r, cell.c)) {
-        if (!visited[neighbor.r][neighbor.c] && this.boardMatrix[neighbor.r][neighbor.c] === playerSide) {
-          visited[neighbor.r][neighbor.c] = true;
-          parent[neighbor.r][neighbor.c] = cell;
-          queue.push(neighbor);
-        }
-      }
-    }
-    return null;
+    return winningPath(this.boardMatrix, playerSide);
   }
 
   public endGame(wonPlayerSide: Player | null, reason: WinReason | null, path: Coordinate[] | null): void {
@@ -643,7 +638,7 @@ export class GameController {
     }
     this.gamePhase = GamePhase.GAME_OVER;
     if (this.activeTimerIntervalId) clearInterval(this.activeTimerIntervalId); this.activeTimerIntervalId = null;
-    if (this.aiMoveTimeoutId) clearTimeout(this.aiMoveTimeoutId); this.aiMoveTimeoutId = null; this.setAiThinking(false);
+    this.cancelAiSearch();
     this.winner = wonPlayerSide; this.winReason = reason; this.winningPath = path;
     this.notifyUpdate();
   }
@@ -708,7 +703,7 @@ export class GameController {
       if (this.options.timerSettings.mode === 'perTurn' && this.currentTurnTimeLeft !== null) {
         this.currentTurnTimeLeft--; if (this.currentTurnTimeLeft <= 0) { this.currentTurnTimeLeft = 0;
           const timeoutWinnerSide = this.currentPlayerId === Player.ONE ? Player.TWO : Player.ONE;
-          this.endGame(timeoutWinnerSide, WinReason.TIMEOUT, null);
+          if (!this.onlineOpponent?.sid) this.endGame(timeoutWinnerSide, WinReason.TIMEOUT, null);
         } changed = true;
       } else if (this.options.timerSettings.mode === 'perGame' && this.playerGameTimeLeft) {
         const currentPlayerSideKey = this.currentPlayerId;
@@ -716,7 +711,7 @@ export class GameController {
              (this.playerGameTimeLeft[currentPlayerSideKey] as number) -=1;
              if (this.playerGameTimeLeft[currentPlayerSideKey]! <= 0) { this.playerGameTimeLeft[currentPlayerSideKey] = 0;
                 const timeoutWinnerSide = currentPlayerSideKey === Player.ONE ? Player.TWO : Player.ONE;
-                this.endGame(timeoutWinnerSide, WinReason.TIMEOUT, null);
+                if (!this.onlineOpponent?.sid) this.endGame(timeoutWinnerSide, WinReason.TIMEOUT, null);
              } changed = true;
         }
       }
@@ -799,7 +794,8 @@ export class GameController {
   public reinitializeFromOnlineState(
     boardString: string,
     playerList: IgPlayerInfo[],
-    sessionInfo: IgSessionInfo
+    sessionInfo: IgSessionInfo,
+    notation?: string,
   ): void {
     if (this.options.player2ControlType !== PlayerControlType.ONLINE) return;
 
@@ -864,20 +860,22 @@ export class GameController {
     this.gamePhase = sessionInfo.status === 'ACTIVE' ? GamePhase.PLAYING : (sessionInfo.status === 'FINISHED' ? GamePhase.GAME_OVER : GamePhase.WAITING_ROOM);
     this.swappedCellCoordinate = null;
     
-    // Crucial: Clear local game history as it's now potentially invalid. Server is source of truth.
+    // An undo can cross the pie-rule move; stone count alone loses that turn.
+    const target = JSON.stringify(newBoardMatrix);
+    const records = notation === undefined
+      ? [...this.gameHistory.getFullHistory()]
+      : serverHistory(this.options.boardSize, notation);
+    const restored = records.findIndex(record => JSON.stringify(record.boardMatrix) === target);
     this.gameHistory.clear();
-    
-    // firstGameMoveDetails and isPlayerRolesSwapped should NOT be reset by a simple undo unless it's the first move.
-    // The server's board state reflects the game state after the undo.
-    // These properties are about the *history* of how the game reached this state, which an undo doesn't erase.
-    // Exception: if the undo reverts the *very first* move, then firstGameMoveDetails should be null.
-    if (this.turnCount === 0) {
-        this.firstGameMoveDetails = null;
-        // isPlayerRolesSwapped would also be false if turnCount is 0.
+    if (restored >= 0) {
+      for (const record of records.slice(0, restored)) this.gameHistory.addMove(record);
+      this.turnCount = records[restored].turnCount;
+      this.firstGameMoveDetails = records[restored].firstGameMove;
+      this.isPlayerRolesSwapped = records[restored].isPlayerRolesSwapped;
+    } else if (this.turnCount === 0) {
+      this.firstGameMoveDetails = null;
+      this.isPlayerRolesSwapped = false;
     }
-    // If the undo reverted a swap action (i.e., turn count goes back to 1 and swap was just made),
-    // isPlayerRolesSwapped should revert. This specific scenario needs careful handling if implemented fully.
-    // For now, assume server state is king and these values are stable unless it's very early game.
 
     // After an undo, the last server-confirmed move EIDs might need to be considered invalidated or reset,
     // depending on how the server handles EIDs post-undo. For now, clear them.
@@ -892,7 +890,7 @@ export class GameController {
 
   public dispose(): void {
     if (this.activeTimerIntervalId) clearInterval(this.activeTimerIntervalId); this.activeTimerIntervalId = null;
-    if (this.aiMoveTimeoutId) clearTimeout(this.aiMoveTimeoutId); this.aiMoveTimeoutId = null; this.setAiThinking(false);
+    this.cancelAiSearch();
     if (DEBUG) console.log("GameController disposed.");
   }
 }

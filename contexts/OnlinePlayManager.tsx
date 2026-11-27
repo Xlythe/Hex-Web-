@@ -258,7 +258,7 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
 
     switch (event.type) {
       case 'LEAVE':
-        reason = WinReason.TIMEOUT; // Or could be a more specific "disconnect" reason if server provides
+        reason = WinReason.FORFEIT;
         message = `${opponentName} has left the game. You win!`;
         systemChatMessage = `${opponentName} has left the game.`;
         break;
@@ -516,6 +516,7 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
           successResponse.gameData.board,
           successResponse.playerList || [],
           successResponse.sessionInfo,
+          successResponse.gameData.moves,
         );
         setIsAwaitingUndoBoardReset(false);
         setUndoRequestState(UndoRequestState.IDLE);
@@ -534,34 +535,18 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
       if (successResponse.playerList && gameController.gamePhase !== GamePhase.GAME_OVER) {
         successResponse.playerList.forEach(pInfo => {
           if (pInfo.stat === PlayerStat.WIN) {
-            const winnerSide = pInfo.place === '1' ? Player.ONE : Player.TWO;
             const winnerMsg = `${pInfo.name || 'Player ' + pInfo.place} has won!`;
             setOnlineGameStatusMessage(winnerMsg);
             if (!systemMessagesTextsAddedBySpecificEventsThisBatch.includes(winnerMsg)) {
               addSystemChatMessage(winnerMsg);
             }
-            let reason = WinReason.CONNECTION;
-            if (pInfo.uid === loggedInUser?.uid && isClaimQuitResponse(
-              successResponse.sessionInfo.cmd,
-              successResponse.eventList,
-            )) {
-              reason = WinReason.CLAIMED;
-            }
-            gameController.endGame(winnerSide, reason, null);
           } else if (pInfo.uid === loggedInUser?.uid && (pInfo.stat === PlayerStat.QUIT || pInfo.stat === PlayerStat.LOST)) {
             const loseMsg = `You ${pInfo.stat === PlayerStat.QUIT ? 'forfeited' : 'lost'} the game.`;
             setOnlineGameStatusMessage(loseMsg);
             if (!systemMessagesTextsAddedBySpecificEventsThisBatch.includes(loseMsg)) {
                 addSystemChatMessage(loseMsg);
             }
-            const opponent = successResponse.playerList?.find(p => p.uid !== loggedInUser?.uid);
-            const opponentSide = opponent ? (opponent.place === '1' ? Player.ONE : Player.TWO) : (gameController.getEffectiveLocalPlayerSide() === Player.ONE ? Player.TWO : Player.ONE);
-            gameController.endGame(opponentSide, pInfo.stat === PlayerStat.QUIT ? WinReason.FORFEIT : WinReason.CONNECTION, null);
-          } else if (pInfo.uid !== loggedInUser?.uid && (pInfo.stat === PlayerStat.QUIT || pInfo.stat === PlayerStat.LOST)) {
-             const oppForfeitMsg = _handleOpponentLeftOrForfeitEvent({ eid: '', type: pInfo.stat === PlayerStat.QUIT ? 'QUIT' : 'LEAVE', uid: pInfo.uid, stamp: Date.now()/1000, data: '' });
-             if(oppForfeitMsg) systemMessagesTextsAddedBySpecificEventsThisBatch.push(oppForfeitMsg);
           }
-
           if (pInfo.timerLeft !== undefined && gameController.options.timerSettings.mode === 'perGame' && (pInfo.place === '1' || pInfo.place === '2')) {
             gameController.setPlayerGameTime(pInfo.place === '1' ? Player.ONE : Player.TWO, pInfo.timerLeft);
           }
@@ -579,7 +564,7 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
         const startMsg = "Game is starting!";
         setOnlineGameStatusMessage(startMsg);
         addSystemChatMessage(startMsg); 
-      } else if (successResponse.sessionInfo?.status === 'FINISHED' && gameController?.gamePhase !== GamePhase.GAME_OVER) {
+      } else if ((successResponse.sessionInfo?.status === 'FINISHED' || successResponse.playerList?.some(player => player.stat === PlayerStat.WIN)) && gameController?.gamePhase !== GamePhase.GAME_OVER) {
         const finishMsg = "Game session has finished.";
         setOnlineGameStatusMessage(finishMsg);
         if (!systemMessagesTextsAddedBySpecificEventsThisBatch.includes(finishMsg)) {
@@ -587,11 +572,13 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
         }
         const winnerInfo = successResponse.playerList?.find(p => p.stat === PlayerStat.WIN);
         const winnerPlayerSide = winnerInfo ? (winnerInfo.place === '1' ? Player.ONE : Player.TWO) : null;
-        let reason = winnerPlayerSide ? WinReason.CONNECTION : null;
-        if (winnerPlayerSide && winnerInfo?.uid === loggedInUser?.uid && isClaimQuitResponse(
+        const ending = successResponse.gameData?.ending || eventsToProcess.find(event => event.type === 'ENDGAME')?.data;
+        let reason = !winnerPlayerSide ? null : ending === 'TIMEOUT' ? WinReason.TIMEOUT
+          : ending === 'GIVEUP' ? WinReason.FORFEIT : WinReason.CONNECTION;
+        if (winnerPlayerSide && (ending === 'CLAIMQUIT' || isClaimQuitResponse(
           successResponse.sessionInfo.cmd,
           successResponse.eventList,
-        )) {
+        ))) {
           reason = WinReason.CLAIMED;
         }
         gameController.endGame(winnerPlayerSide, reason, null);
@@ -1322,7 +1309,7 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
         } else {
           if (isAwaitingUndoBoardReset && successResponse.gameData?.board && gameController) {
             if (DEBUG) console.log("OnlinePlayManager: Board reset from REFRESH data after accepted undo.");
-            gameController.reinitializeFromOnlineState(successResponse.gameData.board, successResponse.playerList || [], successResponse.sessionInfo);
+            gameController.reinitializeFromOnlineState(successResponse.gameData.board, successResponse.playerList || [], successResponse.sessionInfo, successResponse.gameData.moves);
             setIsAwaitingUndoBoardReset(false);
             setUndoRequestState(UndoRequestState.IDLE);
             const updateMsg = "Game state updated after undo.";
@@ -1352,7 +1339,7 @@ export const OnlinePlayManagerProvider: React.FC<OnlinePlayManagerProviderProps>
                     error: null,
                 };
             });
-          } else if (successResponse.sessionInfo?.status === 'FINISHED' && gameController?.gamePhase !== GamePhase.GAME_OVER) {
+          } else if ((successResponse.sessionInfo?.status === 'FINISHED' || successResponse.playerList?.some(player => player.stat === PlayerStat.WIN)) && gameController?.gamePhase !== GamePhase.GAME_OVER) {
             setOnlineGameStatusMessage("Game has finished.");
           }
 

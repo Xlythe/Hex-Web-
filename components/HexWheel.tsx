@@ -1,8 +1,15 @@
+import playIcon from '../icons/native/play.png';
+import settingsIcon from '../icons/native/settings.png';
+import replayIcon from '../icons/native/history.png';
+import helpIcon from '../icons/native/howtoplay.png';
+import accountIcon from '../icons/native/achievements.png';
+import onlineIcon from '../icons/native/store.png';
 import React, { useRef, useState } from 'react';
+
+const icons: Record<string, string> = { play: playIcon, settings: settingsIcon, replay: replayIcon, help: helpIcon, account: accountIcon, online: onlineIcon };
 
 interface Action {
   key: string;
-  icon: string;
   label: string;
   onClick: () => void;
   disabled?: boolean;
@@ -37,7 +44,7 @@ const isNearCenter = (event: React.PointerEvent<HTMLDivElement>): boolean => {
 const wrapAngle = (angle: number): number => ((angle + 540) % 360) - 180;
 
 export const HexWheel: React.FC<Props> = ({ actions }) => {
-  const [rotation, setRotation] = useState(-8);
+  const [rotation, setRotation] = useState(0);
   const [settleDuration, setSettleDuration] = useState(0);
   const drag = useRef<DragState | null>(null);
   const suppressClick = useRef(false);
@@ -109,12 +116,12 @@ export const HexWheel: React.FC<Props> = ({ actions }) => {
   >
     <svg className="hex-wheel-art" viewBox="0 0 300 280" aria-hidden="true">
       <path d="M75 10H225L300 140L225 270H75L0 140Z" fill="#f1f1f1" />
-      <path d="M75 10H225L216 27H84Z" fill="#cc5c57" />
-      <path d="M225 10L300 140L280 140L211 28Z" fill="#5f6ec2" />
-      <path d="M300 140L225 270L215 252L280 140Z" fill="#f9db00" />
-      <path d="M225 270H75L84 253H216Z" fill="#b7cf47" />
-      <path d="M75 270L0 140H20L85 252Z" fill="#f48935" />
-      <path d="M0 140L75 10L85 28L20 140Z" fill="#4ba5e2" />
+      <path d="M75 10H225L216 27H84Z" fill="#4ba5e2" />
+      <path d="M225 10L300 140L280 140L211 28Z" fill="#cc5c57" />
+      <path d="M300 140L225 270L215 252L280 140Z" fill="#5f6ec2" />
+      <path d="M225 270H75L84 253H216Z" fill="#f9db00" />
+      <path d="M75 270L0 140H20L85 252Z" fill="#b7cf47" />
+      <path d="M0 140L75 10L85 28L20 140Z" fill="#f48935" />
       <path d="M150 140L75 10M150 140L225 10M150 140L300 140M150 140L225 270M150 140L75 270M150 140L0 140" stroke="#d0d0d0" strokeWidth="1" />
       <circle cx="150" cy="140" r="48" fill="#f1f1f1" />
     </svg>
@@ -126,6 +133,6 @@ export const HexWheel: React.FC<Props> = ({ actions }) => {
       onClick={action.onClick}
       disabled={action.disabled}
       aria-label={action.label}
-    >{action.icon}<span>{action.label}</span></button>)}
+    ><img src={icons[action.key]} draggable={false} alt="" /><span>{action.label}</span></button>)}
   </div>;
 };

@@ -27,3 +27,29 @@ port. Its prior ingress configuration is backed up as
 
 The mirror uses separate accounts from the original igGameCenter service. It
 does not migrate accounts or games from that service.
+
+## Ubuntu website
+
+Build the web client with `VITE_IGGC_API_BASE_URL=https://hex.xlythe.com pnpm build`.
+The website Compose service in `deploy/compose.yaml` serves the contents of its
+sibling `site/` directory on loopback port 8994. The Ubuntu installation lives in
+`~/hex-site`. Copy the hashed assets before replacing `index.html` so existing
+tabs can finish loading. The tunnel sends the following paths on hex.xlythe.com
+to port 8997, with all other requests going to port 8994.
+
+```
+^/(healthz|events|api_[a-z_]+\.php|server/hex1/api_handler\.php)$
+```
+
+Run `HEX_TEST_SITE=https://hex.xlythe.com python3 mirror/smoke.py` for a live
+two-player test including event streaming. To test the deployed UI, set the same
+environment variable and run `pnpm exec playwright test e2e/live-online.spec.ts --project chrome`.
+For the Android-to-browser test, install the debug and instrumentation APKs from
+Xlythe/Hex and set `HEX_ANDROID_SERIAL` to that device's adb serial.
+
+Timed games started with this server version persist both clocks in SQLite.
+The server charges elapsed time before processing a command and applies the
+increment to a legal move. Accepting an undo restores the clocks saved at the
+undone move. Either client can discover an expired clock by refreshing.
+Completed games record wins, losses and quits. Rated games adjust both
+players' ratings using Elo with a K-factor of 32 and a starting rating of 1500.

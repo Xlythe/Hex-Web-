@@ -239,7 +239,7 @@ export const DEFAULT_CHAT_NOTIFICATIONS_ENABLED = true;
  * @const CLICK_SOUND_URL
  * @description URL for the tile placement sound effect.
  */
-export const CLICK_SOUND_URL = 'https://storage.cloud.google.com/hex-game-assets/hex_clink.mp3';
+export const CLICK_SOUND_URL = new URL('./audio/stone.mp3', import.meta.url).href;
 
 
 /**

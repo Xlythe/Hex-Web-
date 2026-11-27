@@ -76,7 +76,7 @@ const createAccount = async (page: Page) => {
   ).toBeVisible();
 };
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     localStorage.clear();
     sessionStorage.clear();
@@ -84,7 +84,11 @@ test.beforeEach(async ({ page }) => {
     Math.random = () => 0.25;
   });
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Hex' })).toBeVisible();
+  if (testInfo.project.name === 'phone-landscape') {
+    if (testInfo.title.includes('wheel') || testInfo.title.includes('landscape main menu')) return;
+    await page.getByRole('button', { name: 'Play', exact: true }).click();
+  }
+  await expect(page.getByRole('heading', { name: 'Hex' })).toBeAttached();
 });
 
 test('local game page', async ({ page }) => {
@@ -107,9 +111,9 @@ test('wheel follows a swipe and its labels rotate with it', async ({ page }) => 
   const centerY = bounds!.y + bounds!.height / 2;
   const radius = bounds!.width * .39;
   const before = await wheel.evaluate(element => getComputedStyle(element).transform);
-  await page.mouse.move(centerX + radius, centerY);
+  await page.mouse.move(centerX - radius, centerY);
   await page.mouse.down();
-  await page.mouse.move(centerX, centerY + radius, { steps: 8 });
+  await page.mouse.move(centerX, centerY - radius, { steps: 8 });
   await page.mouse.up();
   await expect.poll(() => wheel.evaluate(element => getComputedStyle(element).transform)).not.toBe(before);
   await expect(page.locator('.hex-wheel-replay')).toHaveCSS('transform', 'none');
@@ -199,4 +203,13 @@ test('online game and chat pages', async ({ page }) => {
   await page.getByRole('button', { name: 'Open Chat' }).click();
   await expect(page.getByRole('heading', { name: 'Game Chat' })).toBeVisible();
   await screenshot(page, 'game-chat');
+});
+
+test('landscape main menu matches the Android composition', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'phone-landscape');
+  await screenshot(page, 'main-menu');
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Cell R1C1 Empty' })).toBeVisible();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await expect(page.locator('.hex-wheel')).toBeVisible();
 });

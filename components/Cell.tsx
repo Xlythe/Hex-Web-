@@ -1,3 +1,4 @@
+import { CELL_WIDTH_PX, CELL_HEIGHT_PX } from './cellSize';
 
 import React from 'react';
 import { CellState, Player, Coordinate, FirstGameMoveDetails } from '../types';
@@ -47,8 +48,8 @@ interface CellProps {
 }
 
 // Fixed dimensions for the hexagonal cell.
-const CELL_WIDTH = '36px';
-const CELL_HEIGHT = '31px';
+const CELL_WIDTH = CELL_WIDTH_PX;
+const CELL_HEIGHT = CELL_HEIGHT_PX;
 
 /**
  * Converts a hex color string to an rgba string.
@@ -82,7 +83,7 @@ const Cell: React.FC<CellProps> = ({
   player2Color,
   currentPlayerActualColor,
 }) => {
-  const clipPathValue = 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)';
+  const clipPathValue = 'polygon(50% 3%, 96% 27%, 96% 73%, 50% 97%, 4% 73%, 4% 27%)';
   
   let cellClasses = `hex-cell flex items-center justify-center text-white font-bold transition-all duration-200 ease-in-out focus:outline-none focus:ring-0`;
   const cellStyle: React.CSSProperties = {
