@@ -1,3 +1,4 @@
+import { winningPath } from './winningPath';
 import { CompletedGameEntry, GamePhase, Player, BoardMatrix, Coordinate, PlayerProfile, FirstGameMoveDetails, HistoryEntry, TimerMode, WinReason, TimerSettings } from './types';
 import { REPLAY_STEP_DELAY_MS } from './Constants';
 import { createEmptyBoard } from './utils';
@@ -293,14 +294,12 @@ export class ReplayService {
     
     const gamePhaseSnapshot = this._isActive ? GamePhase.REPLAY : GamePhase.GAME_OVER;
     
-    // Determine which winning path to display:
-    // - If replay is over AND on the last actual step, show the game's final winning path.
-    // - Otherwise, show the winning path from the current history entry (if any).
-    const isLastActualStepInHistory = this.currentStepIndex === history.length - 1 && history.length > 0;
-    const displayWinningPath = (isLastActualStepInHistory && !this._isActive) 
-                               ? gameData.finalWinningPath 
-                               : (currentHistoryEntry?.winningPath || null);
-
+    // Older browser saves cached their highlight. Recalculate from the final stones
+    // so a legacy highlight cannot hide a shorter chain or invent a connection.
+    const isFinalBoard = this.currentStepIndex === history.length - 1 && history.length > 0;
+    const displayWinningPath = isFinalBoard && gameData.finalWinnerPlayerColor
+      && (gameData.winReason === WinReason.CONNECTION || !gameData.winReason)
+      ? winningPath(board, gameData.finalWinnerPlayerColor) : null;
 
     return {
       boardMatrix: board,

@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { ReplayService, type ReplaySnapshot } from './ReplayService';
 import native from './testdata/android-game.rhex?raw';
 import { type Replay, MAX_REPLAY_BYTES, serverHistory, readReplay, writeReplay } from './replayFile';
 import { Player, WinReason } from './types';
@@ -32,6 +33,23 @@ describe('Android replay exchange', () => {
       expect(doc.moveList.moveList.map(({x, y, team, swap}) => [x,y,team,swap]))
         .toEqual(source.moveList.moveList.map(({x, y, team, swap}) => [x,y,team,swap]));
       expect(readReplay(encoded).history).toEqual(game.history);
+    }
+  });
+
+  it('repairs a legacy cached highlight during playback', () => {
+    vi.useFakeTimers();
+    try {
+      const game = readReplay(native);
+      delete game.sourceReplay;
+      game.finalWinningPath = [{ r: 2, c: 2 }];
+      game.history[game.history.length - 1].winningPath = game.finalWinningPath;
+      const snapshots: ReplaySnapshot[] = [];
+      const replay = new ReplayService(snapshot => { if (snapshot) snapshots.push(snapshot); });
+      replay.startReplay(game);
+      vi.runAllTimers();
+      expect(snapshots.at(-1)?.winningPath).toEqual([{ r: 0, c: 0 }, { r: 0, c: 1 }, { r: 0, c: 2 }]);
+    } finally {
+      vi.useRealTimers();
     }
   });
 
