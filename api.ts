@@ -11,11 +11,12 @@ import {
   IgCommandHandlerFullParams, IgCommandHandlerResponse, // Added IgCommandHandler types
   IgLobbyApiParams, IgLobbyResponse, // Added Lobby types
   IgCreateBoardParams, IgCreateBoardResponse, // Added Create Board types
-  LoggedInUser,
+  LoggedInUser, Standing,
 } from './types';
 
 // Define a common interface that both RealApi and MockIgGameCenterApi implement
 export interface IGameCenterApi {
+  standings(): Promise<Standing[]>;
   registerUser(params: Omit<IgUserRegistrationParams, 'networkuid'>): Promise<IgApiResponse>;
   loginUser(params: Omit<IgUserLoginParams, 'networkuid'>): Promise<IgApiResponse>;
   getUserProfile(params: IgUserProfileParams): Promise<IgUserProfileData | IgUserRegistrationError>;

@@ -386,7 +386,22 @@ export interface IgGameLogEntry {
  * @interface IgUserProfileData
  * @description Structure for the parsed user profile data from igGameCenter.
  */
+export interface Standing {
+  rank: number;
+  name: string;
+  score: number;
+  wins: number;
+  played: number;
+}
+export interface PlayerAchievement {
+  name: string;
+  steps: number;
+  incremental: boolean;
+  unlocked: boolean;
+}
 export interface IgUserProfileData {
+  achievements?: PlayerAchievement[];
+  playGamesSynced?: number;
   curtime?: number;
   isFastReg?: '0' | '1';
   name?: string;

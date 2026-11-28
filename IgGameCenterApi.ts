@@ -1,3 +1,4 @@
+import type { Standing } from './types';
 import {
   IgApiResponse,
   IgCommandHandlerFullParams,
@@ -287,6 +288,17 @@ export class IgGameCenterApi {
     return response;
   }
 
+  public async standings(): Promise<Standing[]> {
+    const result = await this.postXml('/api_standings.php', this.commonParams({}));
+    if (isError(result)) throw new Error(result.message || 'Could not load standings.');
+    if (result.document.documentElement.tagName !== 'standings') throw new Error('Standings unavailable.');
+    return Array.from(result.document.querySelectorAll('standings > player'), node => ({
+      rank: Number(node.getAttribute('rank')), name: node.getAttribute('name') || '',
+      score: Number(node.getAttribute('score')), played: Number(node.getAttribute('played')),
+      wins: Number(node.getAttribute('wins')),
+    }));
+  }
+
   public async getUserProfile(
     params: IgUserProfileParams,
   ): Promise<IgUserProfileData | IgUserRegistrationError> {
@@ -300,6 +312,11 @@ export class IgGameCenterApi {
 
     const profileData: IgUserProfileData = {
       error: false,
+      playGamesSynced: Number(profile.querySelector('achievements')?.getAttribute('synced') || 0),
+      achievements: Array.from(profile.querySelectorAll('achievements > achievement'), node => ({
+        name: node.getAttribute('name') || '', steps: Number(node.getAttribute('steps')),
+        incremental: node.getAttribute('incremental') === '1', unlocked: node.getAttribute('unlocked') === '1',
+      })),
       curtime: integer(text(profile, 'curtime')),
       isFastReg: text(profile, 'isFastReg') as '0' | '1' | undefined,
       name: text(profile, 'name'),
