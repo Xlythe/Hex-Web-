@@ -59,17 +59,6 @@
 .hex-wheel { position: relative; width: min(100%, 320px); aspect-ratio: 300 / 280; margin: 1.5rem auto 0; filter: drop-shadow(12px 16px 0 #232323); transition: transform 0ms cubic-bezier(.15,.7,.25,1); touch-action: none; }
 .hex-wheel-art { width: 100%; height: 100%; }
 .hex-wheel-center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: #333; font-size: 2.6rem; font-weight: 300; }
-.hex-wheel-action { position: absolute; width: 20%; height: 20%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .12rem; border: 0; border-radius: 12px; color: #3b3b3b; background: transparent; font-size: 1.3rem; line-height: 1; cursor: pointer; transition: background .16s ease, scale .16s ease; }
-.hex-wheel-action span { font-size: .72rem; font-weight: 700; letter-spacing: .02em; }
-.hex-wheel-action:hover, .hex-wheel-action:focus-visible { background: #00000019; scale: 1.05; outline: 2px solid #333; outline-offset: -3px; }
-.hex-wheel-action:active { background: #00000035; scale: .98; }
-.hex-wheel-action:disabled { opacity: .4; cursor: not-allowed; }
-.hex-wheel-settings { left: 40%; top: 13%; }
-.hex-wheel-online { right: 20%; top: 24%; }
-.hex-wheel-replay { right: 20%; bottom: 24%; }
-.hex-wheel-help { left: 40%; bottom: 13%; }
-.hex-wheel-account { left: 20%; bottom: 24%; }
-.hex-wheel-play { left: 20%; top: 24%; }
 .hex-home-caption { max-width: 15rem; margin: 1.5rem auto 0; font-size: .95rem; color: #d1d1d1; line-height: 1.45; }
 
 .hex-app-shell:has(.hex-stage) > .hex-game-card { width: 100%; max-width: 760px; }
@@ -84,11 +73,11 @@
 }
 
 .hex-game-card h1,
-.hex-game-card > .flex:first-child button {
+.hex-game-card > .game-header button {
   color: #fff;
 }
 
-.hex-game-card > .flex:first-child h1 {
+.hex-game-card > .game-header h1 {
   font-weight: 400;
   letter-spacing: .025em;
 }
@@ -170,7 +159,7 @@
   .hex-home-rule { margin-bottom: .5rem; }
   .hex-wheel { width: 210px; margin-top: .5rem; }
   .hex-home-caption, .hex-home-rule-bottom { display: none; }
-  .hex-game-card > .flex:first-child h1 {
+  .hex-game-card > .game-header h1 {
     font-size: 2rem;
   }
   .hex-game-card > .mt-1.mb-2.h-8,
@@ -201,13 +190,12 @@
   .hex-home-caption, .hex-home-rule-bottom { display: none; }
 }
 
-.hex-wheel-action img { height: 55%; width: auto; object-fit: contain; }
 .native-menu, .native-account { display: none; }
 @media (orientation: landscape) and (max-height: 520px) {
   .hex-app-shell:has(.hex-stage) { display: block; padding: 0; }
   .show-menu .hex-stage { position: relative; width: 100%; max-width: none; height: 100dvh; overflow: hidden; }
   .show-menu .hex-home-intro { position: absolute; top: 7%; left: 5%; }
-  .show-menu .hex-wheel { position: absolute; top: 57%; left: 76%; width: min(134dvh, 79vw); margin: 0; translate: -50% -50%; filter: none; }
+  .show-menu .hex-wheel { position: absolute; top: 50%; left: 76%; width: min(111dvh, 75vw); margin: 0; translate: -50% -50%; filter: none; }
   .show-menu .hex-wheel-center { font-size: 10dvh; }
   .show-menu .native-account { display: block; position: absolute; bottom: 5%; left: 3%; background: white; color: #333; padding: .4rem 1.2rem; }
   .show-menu .hex-game-card, .show-board .hex-stage { display: none; }
@@ -219,22 +207,40 @@
 @media (orientation: landscape) and (max-height: 520px) {
   .show-menu .hex-home-intro { display: none; }
   .show-menu .native-player-name { display: block; position: absolute; top: 6%; left: 4%; }
-  .hex-wheel-play { left: 40%; top: 15%; }
-  .hex-wheel-settings { left: 62%; top: 28%; }
-  .hex-wheel-online { right: 18%; top: 55%; }
-  .hex-wheel-replay { right: 40%; bottom: 12%; }
-  .hex-wheel-help { left: 18%; bottom: 25%; }
-  .hex-wheel-account { left: 18%; bottom: 52%; }
   .hex-app-shell.show-board:has(.hex-stage) > .hex-game-card { max-width: none; border-top: 0; }
   .show-board .hex-board-stage .hex-turn-banner { position: absolute; inset: 29% 0 auto; height: 37%; margin: 0; }
   .show-board .hex-board-stage .hex-board { margin-left: auto; width: 83%; }
 }
+
+
+.game-actions { display: flex; gap: .3rem; align-items: end; }
+.game-actions button { display: grid; justify-items: center; align-content: center; gap: .15rem; min-width: 44px; min-height: 44px; padding: .2rem; color: #fff; font-size: .7rem; font-weight: 600; text-transform: uppercase; cursor: pointer; }
+.game-actions img { width: 24px; height: 24px; object-fit: contain; }
+.game-actions button:disabled { opacity: .55; cursor: default; }
+.game-actions button:focus-visible { outline: 2px solid white; }
+.game-actions button:hover:enabled { background: #ffffff20; }
+.hex-app-shell.menu-only:has(.hex-stage) { display: flex; justify-content: center; }
+.menu-only > .hex-game-card { display: none; }
 @media (orientation: landscape) and (max-height: 520px) {
-  .hex-wheel-action span { position: absolute; color: #fff; font-size: max(.85rem, 3.5dvh); font-weight: 500; white-space: nowrap; }
-  .hex-wheel-play span { top: -58%; }
-  .hex-wheel-settings span { left: 85%; rotate: 60deg; }
-  .hex-wheel-online span { left: 92%; rotate: -60deg; }
-  .hex-wheel-replay span { bottom: -50%; }
-  .hex-wheel-help span { right: 95%; rotate: 60deg; }
-  .hex-wheel-account span { right: 86%; rotate: -60deg; }
+  .show-board .game-actions { position: absolute; left: 0; bottom: 0; z-index: 2; }
 }
+
+.hex-wheel { user-select: none; }
+.hex-wheel-art { display: block; transition-property: transform; transition-timing-function: cubic-bezier(.17,.7,.3,1); }
+.hex-wheel-center { pointer-events: none; }
+.wheel-sector { cursor: pointer; outline: none; }
+.wheel-sector text { fill: white; font: 500 12px Roboto, sans-serif; pointer-events: none; }
+.wheel-sector image { pointer-events: none; transform-box: fill-box; transform-origin: center; transition: transform 120ms ease-out; }
+.wheel-wedge { fill: #f1f1f1; transition: fill 120ms ease-out; }
+.wheel-sector:focus-visible .wheel-wedge { fill: #d8e3e9; }
+.hex-wheel:not([data-dragging]) .wheel-sector:active .wheel-wedge { fill: #dbdedd; }
+.hex-wheel:not([data-dragging]) .wheel-sector:active image { transform: scale(.92); }
+@media (prefers-reduced-motion: reduce) {
+  .hex-wheel-art, .wheel-sector image, .wheel-wedge { transition-duration: 0s !important; }
+}
+
+.game-fullscreen { position: absolute; top: max(.25rem, env(safe-area-inset-top)); right: max(.25rem, env(safe-area-inset-right)); z-index: 5; display: grid; place-items: center; width: 44px; height: 44px; color: white; cursor: pointer; border-radius: 50%; }
+.game-fullscreen:hover, .game-fullscreen:focus-visible { background: #ffffff20; }
+.hex-game-card:fullscreen .hex-board-stage { flex: 1; min-height: 0; }
+.hex-game-card:fullscreen .hex-turn-banner { display: none; }
+.hex-game-card:fullscreen .hex-board-stage .hex-board { width: 100%; }

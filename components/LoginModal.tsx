@@ -220,7 +220,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             </div>
           )}
 
-          <a href="https://www.iggamecenter.com/en/" target="_blank" rel="noopener noreferrer" className="underline">Open igGameCenter’s separate lobby</a>
           <div className="mt-6 pt-4 border-t border-theme-divider-light dark:border-theme-divider-dark flex flex-col sm:flex-row justify-between items-center space-y-2 sm:space-y-0 sm:space-x-3">
             <button
                 type="button"

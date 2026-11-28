@@ -3,7 +3,6 @@ import { CELL_WIDTH_PX, CELL_HEIGHT_PX } from './cellSize';
 import React, { useRef, useState, useEffect, useLayoutEffect } from 'react';
 import { BoardMatrix, Player, Coordinate, FirstGameMoveDetails } from '../types';
 import Cell from './Cell';
-import { ExpandIcon } from '../icons/ExpandIcon'; // Import the new ExpandIcon
 
 /**
  * @file Board.tsx
@@ -15,8 +14,6 @@ import { ExpandIcon } from '../icons/ExpandIcon'; // Import the new ExpandIcon
  * - Visually representing the current game state, including:
  *   - Pieces placed by Player.ONE and Player.TWO.
  *   - Highlighting a winning path if a player has won.
- *   - Indicating the current player's connection goal (e.g., top-to-bottom or left-to-right)
- *     using edge indicators. This is now shown during active replays as well.
  * - Implementing responsive scaling to ensure the board fits gracefully within various screen sizes
  *   and its container.
  * - Providing a fullscreen toggle functionality for an immersive game experience.
@@ -91,10 +88,7 @@ interface BoardProps {
   currentPlayerActualColor: string;
   /** Boolean indicating if the game board is currently displayed in fullscreen mode. */
   isFullScreen: boolean;
-  /** Callback function to request a toggle of the fullscreen mode. */
-  onToggleFullScreen: () => void;
-  /** Boolean indicating if a game replay is currently active. */
-  isReplayActive: boolean;
+
 }
 
 // --- Fundamental Pixel Dimensions for Hexagonal Grid Rendering ---
@@ -128,8 +122,6 @@ const Board: React.FC<BoardProps> = ({
   player2Color,
   currentPlayerActualColor,
   isFullScreen,
-  onToggleFullScreen,
-  isReplayActive,
 }) => {
   const boardSize = boardMatrix.length; // Assumes a square board (e.g., 11 for 11x11).
   /** Ref attached to the main wrapper div of the board. Used to measure available space for scaling. */
@@ -312,7 +304,7 @@ const Board: React.FC<BoardProps> = ({
   };
 
   /**
-   * CSS properties for the div that directly contains the board grid and edge indicators.
+   * CSS properties for the div that directly contains the board grid.
    * This div is scaled using `transform: scale()`.
    * `transformOrigin: 'top left'` ensures scaling behaves predictably from the top-left corner.
    * `visibility` is set to 'hidden' until original dimensions are calculated to prevent flash of unstyled content.
@@ -345,11 +337,6 @@ const Board: React.FC<BoardProps> = ({
     minHeight: layoutProps.originalHeight === 0 ? '100px' : undefined,
   };
   
-  // Dimensions of the parent of edge indicators (the scalableContent div).
-  // Used to make edge indicators responsive to the scaled board size.
-  const edgeIndicatorParentWidth = layoutProps.originalWidth;
-  const edgeIndicatorParentHeight = layoutProps.originalHeight;
-
   // Base CSS classes for the board wrapper.
   const baseWrapperClasses = "hex-board relative block"; // `relative` for absolute positioning of fullscreen button and scalable content.
   // Fullscreen specific classes: take full parent dimensions and apply a contrasting background.
@@ -364,63 +351,12 @@ const Board: React.FC<BoardProps> = ({
       style={boardWrapperDynamicStyle}
       aria-label="Game Board Area" // Accessibility: Label for the board container.
     >
-      {/* Fullscreen toggle button: only shown when not in fullscreen mode. */}
-      {!isFullScreen && (
-        <button
-          onClick={onToggleFullScreen}
-          className="absolute top-1 right-1 z-20 p-1.5 text-theme-icon-light dark:text-theme-icon-dark hover:text-theme-icon-light-hover dark:hover:text-theme-icon-dark-hover transition-colors duration-150 rounded-full hover:bg-theme-button-icon-bg-hover-light dark:hover:bg-theme-button-icon-bg-hover-dark focus:outline-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 dark:focus:ring-yellow-500"
-          aria-label="Enter Fullscreen"
-          title="Enter Fullscreen"
-        >
-          <ExpandIcon className="w-5 h-5" />
-        </button>
-      )}
-
-      {/* This div is the one that gets scaled. It contains the hex grid and edge indicators. */}
+      {/* This div is the one that gets scaled. It contains the hex grid. */}
       <div style={scalableContentStyle} role="grid" aria-rowcount={boardSize} aria-colcount={boardSize}>
-        {/* Edge Indicators: Visual cues for player connection goals.
-            Rendered if layout is calculated AND (EITHER no winner OR replay is active). */}
-        {layoutProps.originalWidth > 0 && layoutProps.originalHeight > 0 && (!winningPlayer || isReplayActive) && (
-          <>
-            {/* Player.TWO (Vertical connector) indicators: Top and Bottom edges. */}
-            {currentPlayer === Player.TWO && (
-              <>
-                <div
-                  className="absolute left-1/2 -translate-x-1/2 top-0 h-1.5 rounded-full opacity-70"
-                  style={{ width: `${edgeIndicatorParentWidth * 0.6}px`, minWidth: '50px', backgroundColor: player2Color }}
-                  aria-hidden="true" // Decorative element
-                ></div>
-                <div
-                  className="absolute left-1/2 -translate-x-1/2 bottom-0 h-1.5 rounded-full opacity-70"
-                  style={{ width: `${edgeIndicatorParentWidth * 0.6}px`, minWidth: '50px', backgroundColor: player2Color }}
-                  aria-hidden="true"
-                ></div>
-              </>
-            )}
-            {/* Player.ONE (Horizontal connector) indicators: Left and Right edges. */}
-            {currentPlayer === Player.ONE && (
-              <>
-                <div
-                  className="absolute top-1/2 -translate-y-1/2 left-0 w-1.5 rounded-full opacity-70"
-                  style={{ height: `${edgeIndicatorParentHeight * 0.6}px`, minHeight: '50px', backgroundColor: player1Color }}
-                  aria-hidden="true"
-                ></div>
-                <div
-                  className="absolute top-1/2 -translate-y-1/2 right-0 w-1.5 rounded-full opacity-70"
-                  style={{ height: `${edgeIndicatorParentHeight * 0.6}px`, minHeight: '50px', backgroundColor: player1Color }}
-                  aria-hidden="true"
-                ></div>
-              </>
-            )}
-          </>
-        )}
-
         {/* Container for the actual hexagonal grid cells. Includes internal padding. */}
         <div style={{ 
             display: 'flex', 
             flexDirection: 'column', // Rows are stacked vertically.
-            position: 'relative', // Ensures it's above edge indicators if z-index isn't enough.
-            zIndex: 1, // Render grid above edge indicators.
             paddingTop: `${BOARD_INTERNAL_VERTICAL_PADDING_PX}px`,
             paddingBottom: `${BOARD_INTERNAL_VERTICAL_PADDING_PX}px`,
             paddingLeft: `${BOARD_INTERNAL_HORIZONTAL_PADDING_PX}px`,

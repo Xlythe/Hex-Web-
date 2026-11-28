@@ -1,9 +1,7 @@
 # Hex Online Board Game
 
 [Play Hex on the web](https://hex.xlythe.com). Android and web players share
-Xlythe accounts, matchmaking, moves and chat. Both sign-in screens also link to
-igGameCenter's independent browser lobby, which uses its own accounts. A room
-started on one service stays there.
+Xlythe accounts, matchmaking, moves and chat. Profiles show the player's rating and match record. Google Play Games sign-in and achievements are available in the Android client. The browser uses Xlythe sign-in. Neither client has a Google Play leaderboard.
 
 Choose **Replay** to import a `.rhex` file or export a saved game. On Android
 these actions are under **History**. Both clients accept unversioned Android
