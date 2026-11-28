@@ -147,7 +147,7 @@ class MirrorTest(unittest.TestCase):
         self.handler(self.second, sid)
         self.handler(self.second, sid, "PLACE", place="2")
         with patch.object(server.time, "time_ns", return_value=100_000_000_000) as clock:
-            self.handler(self.first, sid, "START")
+            self.handler(self.first, sid, "START", client="web")
             self.handler(self.second, sid, "START")
             clock.return_value += 3_000_000_000
             state = self.handler(self.first, sid, "MOVE", move="B1")
@@ -193,7 +193,8 @@ class MirrorTest(unittest.TestCase):
 
     @patch.dict(os.environ, HEX_GOOGLE_CLIENT_ID="client", HEX_GOOGLE_CLIENT_SECRET="secret")
     def test_verified_google_link_syncs_earned_progress_and_rejects_account_conflicts(self):
-        progress = {achievements.ACHIEVEMENTS["computer"][0]: {"achievementState": "UNLOCKED"}}
+        progress = {achievements.ACHIEVEMENTS["computer"][0]: {"achievementState": "UNLOCKED"},
+                    achievements.ACHIEVEMENTS["played1"][0]: {"currentSteps": 12}}
         mutations = []
         def google(url, *, token=None, form=None):
             if url.endswith("/token"):
@@ -213,14 +214,17 @@ class MirrorTest(unittest.TestCase):
                 db.execute("INSERT INTO games(sid,owner,board,options,created) VALUES('played',?,'000', '{}',0)",
                            (self.first["uid"],))
                 db.execute("INSERT INTO results VALUES('played',?,'WIN',0)", (self.first["uid"],))
+                db.execute("INSERT INTO members(sid,uid,seat,last_seen) VALUES('played',?,1,0)", (self.first["uid"],))
+                db.execute("INSERT INTO web_seats VALUES('played',?)", (self.first["uid"],))
                 for event, stamp in (("ACTIVE", 100), ("ENDGAME", 130)):
                     db.execute("INSERT INTO events(sid,uid,type,stamp) VALUES('played',?,?,?)",
                                (self.first["uid"], event, stamp))
             self.call("/api_play_sync.php", **self.first, code="fresh-code")
             initial = len(mutations)
             self.assertGreater(initial, 0)
+            self.assertEqual(13, progress[achievements.ACHIEVEMENTS["played1"][0]]["currentSteps"])
             self.call("/api_play_sync.php", **self.first, code="fresh-code")
-            self.assertEqual(initial,len(mutations))
+            self.assertEqual(initial, len(mutations))
             result = self.call("/api_profile.php", **self.first).find("profile/achievements")
             self.assertGreater(int(result.get("synced")), 0)
             self.assertEqual("1", result.find("achievement[@name='Beat the computer']").get("unlocked"))
@@ -229,7 +233,7 @@ class MirrorTest(unittest.TestCase):
                 self.call("/api_play_sync.php", **self.second, code="fresh-code")
             with self.assertRaisesRegex(ValueError, "expired"):
                 self.call("/api_play_sync.php", uid=self.first["uid"], session_id="wrong", code="fresh-code")
-            self.assertEqual(initial,len(mutations))
+            self.assertEqual(initial, len(mutations))
 
     def test_full_board_has_one_winner_and_only_edge_adjacency_counts(self):
         for mask in range(512):

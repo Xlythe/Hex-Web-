@@ -369,6 +369,8 @@ def command(db, values):
     elif cmd == "START":
         if current["status"] != "INIT" or seat not in (1, 2):
             raise ValueError("Take a seat before starting.")
+        if values.get("client") == "web":
+            db.execute("INSERT OR IGNORE INTO web_seats VALUES(?,?)", (sid, uid))
         db.execute("UPDATE members SET stat='OFFERSTART' WHERE sid=? AND uid=?", (sid, uid))
         emit(db, sid, uid, "START")
         ready = db.execute("SELECT COUNT(*) FROM members WHERE sid=? AND seat IN (1,2) AND stat='OFFERSTART'", (sid,)).fetchone()[0]

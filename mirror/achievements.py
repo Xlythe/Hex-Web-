@@ -1,7 +1,6 @@
 """Hex standings and Play Games progress for an authenticated Android game server."""
 import json
 import os
-import sqlite3
 import time
 from urllib.error import URLError
 from urllib.parse import urlencode
@@ -32,6 +31,12 @@ def init(db):
       CREATE TABLE IF NOT EXISTS play_progress(
           uid TEXT NOT NULL REFERENCES play_accounts(uid), achievement TEXT NOT NULL,
           steps INTEGER NOT NULL, unlocked INTEGER NOT NULL, PRIMARY KEY(uid,achievement));
+      CREATE TABLE IF NOT EXISTS web_seats(
+          sid TEXT NOT NULL, uid TEXT NOT NULL, PRIMARY KEY(sid,uid),
+          FOREIGN KEY(sid) REFERENCES games(sid), FOREIGN KEY(uid) REFERENCES users(uid));
+      CREATE TABLE IF NOT EXISTS play_targets(
+          uid TEXT NOT NULL REFERENCES play_accounts(uid), achievement TEXT NOT NULL,
+          web_steps INTEGER NOT NULL, target INTEGER NOT NULL, PRIMARY KEY(uid,achievement));
       CREATE INDEX IF NOT EXISTS event_history_type ON events(sid,type,stamp);
     """)
 
@@ -126,6 +131,20 @@ def sync(db, uid, code):
             page = batch.get("nextPageToken")
             if not page: return result
     before = read_progress()
+    # Android already submits its own games. Only browser seats add steps to Google's
+    # baseline. Persist the absolute targets before posting so a timeout can be retried.
+    with db:
+        db.execute("BEGIN IMMEDIATE")
+        browser = db.execute("""SELECT count(*),coalesce(sum(r.outcome='WIN'),0) FROM results r
+             JOIN web_seats w USING(sid,uid) WHERE r.uid=?""", (uid,)).fetchone()
+        for key in INCREMENTAL:
+            web_steps = browser[0 if key.startswith("played") else 1]
+            previous = db.execute("SELECT web_steps,target FROM play_targets WHERE uid=? AND achievement=?",
+                                  (uid,key)).fetchone()
+            prior_web, prior_target = previous if previous else (0, 0)
+            google_steps = before.get(ACHIEVEMENTS[key][0], {}).get("currentSteps", 0)
+            local[key] = max(local[key], max(prior_target, google_steps) + max(0, web_steps - prior_web))
+            db.execute("INSERT OR REPLACE INTO play_targets VALUES(?,?,?,?)", (uid,key,web_steps,local[key]))
     changed = False
     for key, steps in local.items():
         ident = ACHIEVEMENTS[key][0]

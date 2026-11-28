@@ -7,8 +7,8 @@ test('the AI replies using a dedicated worker', async ({ page }) => {
     Math.random = () => 0.25;
   });
   await page.goto('/');
-  if (!await page.getByRole('button', { name: 'Cell R1C1 Empty' }).isVisible()) {
-    await page.getByRole('button', { name: 'Play', exact: true }).click();
+  if (await page.evaluate(() => matchMedia('(orientation: landscape) and (max-height: 520px)').matches)) {
+    await page.getByRole('button', { name: 'Play', exact: true }).press('Enter');
   }
   const worker = page.waitForEvent('worker');
   await page.getByRole('button', { name: 'Cell R1C1 Empty' }).click();

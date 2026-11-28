@@ -64,9 +64,9 @@ achievements earned in Android Hex, including offline computer games.
 In Hex on Android, sign into Play Games and choose **Achievements → Sync with
 Xlythe**. Confirm both account names. Sync uses a single-use Google authorization
 code. Google verifies the player identity and supplies their achievements. A
-Play Games player and Xlythe account can only be linked to each other. Each
-sync takes the higher incremental step count and the union of unlocks, so
-retrying or playing the same online match on Android cannot count it twice.
+Play Games player and Xlythe account can only be linked to each other. Verified browser games add steps to the existing Google count. Older games
+establish a minimum, and unlocks carry across both accounts. The server saves
+absolute targets before sending them, so retries cannot count a game twice.
 A subsequent sync on Android picks up newer progress. The server discards
 Google tokens after the request.
 

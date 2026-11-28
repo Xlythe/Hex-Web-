@@ -466,7 +466,7 @@ export class IgGameCenterApi {
       return this.error('Invalid igGameCenter game-server name.');
     }
     const path = `/server/${encodeURIComponent(serverName)}/api_handler.php`;
-    const result = await this.postXml(path, form(params));
+    const result = await this.postXml(path, form({ ...params, client: 'web' }));
     if (isError(result)) return result;
 
     const handler = result.document.querySelector('handlerData');
