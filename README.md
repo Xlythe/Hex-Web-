@@ -71,7 +71,7 @@ pnpm dev
 
 Open `http://localhost:3000`. Use `pnpm build` and `pnpm preview` to test
 the production bundle. The public website is deployed from `main` to
-`https://xlythe.github.io/Hex-Web-/` through GitHub Pages.
+`https://xlythe.github.io/Hex-Web/` through GitHub Pages.
 
 ### Note on API Keys & Online Play
 
