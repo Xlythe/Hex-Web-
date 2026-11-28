@@ -134,6 +134,18 @@ def init_db():
             last_seen INTEGER NOT NULL, PRIMARY KEY(sid,uid)
           );
           CREATE UNIQUE INDEX IF NOT EXISTS occupied_seat ON members(sid,seat) WHERE seat IN (1,2);
+          CREATE TABLE IF NOT EXISTS clocks (
+            sid TEXT PRIMARY KEY REFERENCES games(sid), first_ms INTEGER, second_ms INTEGER, since_ms INTEGER
+          );
+          CREATE TABLE IF NOT EXISTS move_clocks (
+            sid TEXT, move_index INTEGER, first_ms INTEGER, second_ms INTEGER, PRIMARY KEY(sid,move_index),
+            FOREIGN KEY(sid,move_index) REFERENCES moves(sid,move_index) ON DELETE CASCADE
+          );
+          CREATE TABLE IF NOT EXISTS results (
+            sid TEXT REFERENCES games(sid), uid TEXT REFERENCES users(uid), outcome TEXT,
+            rating_delta INTEGER, PRIMARY KEY(sid,uid)
+          );
+          CREATE INDEX IF NOT EXISTS results_by_user ON results(uid);
           CREATE TABLE IF NOT EXISTS events (
             eid INTEGER PRIMARY KEY AUTOINCREMENT, sid TEXT NOT NULL REFERENCES games(sid),
             stamp INTEGER NOT NULL, uid TEXT NOT NULL, type TEXT NOT NULL, data TEXT NOT NULL DEFAULT ''
@@ -217,9 +229,45 @@ def board_won(board, size, seat):
     return False
 
 
+def rating(db, uid):
+    return 1500 + db.execute("SELECT COALESCE(SUM(rating_delta),0) FROM results WHERE uid=?", (uid,)).fetchone()[0]
+
+
+def finish(db, current, winner, loser_stat, actor, detail):
+    sid = current["sid"]
+    seated = {p["seat"]: p["uid"] for p in members(db, sid) if p["seat"]}
+    delta = 0
+    if json.loads(current["options"])["scored"] == "1":
+        difference = rating(db, seated[3 - winner]) - rating(db, seated[winner])
+        expected = 1 / (1 + 10 ** (max(-800, min(800, difference)) / 400))
+        delta = round(32 * (1 - expected))
+    for seat, uid in seated.items():
+        stat = "WIN" if seat == winner else loser_stat
+        db.execute("INSERT INTO results VALUES(?,?,?,?)", (sid, uid, stat, delta if seat == winner else -delta))
+        db.execute("UPDATE members SET stat=? WHERE sid=? AND uid=?", (stat, sid, uid))
+    update_game(db, sid, status="FINISHED", active_seat=0)
+    emit(db, sid, actor, "ENDGAME", detail)
+
+
+def clock_values(db, current, stamp):
+    clock = db.execute("SELECT * FROM clocks WHERE sid=?", (current["sid"],)).fetchone()
+    if not clock:
+        return None
+    remaining = [clock["first_ms"], clock["second_ms"]]
+    if current["status"] == "ACTIVE":
+        index = current["active_seat"] - 1
+        remaining[index] = max(0, remaining[index] - max(0, stamp - clock["since_ms"]))
+    return remaining
+
+
+def save_clock(db, sid, remaining, stamp):
+    db.execute("INSERT OR REPLACE INTO clocks VALUES(?,?,?,?)", (sid, *remaining, stamp))
+
+
 def response(db, values, user, current):
     sid = current["sid"]
     root = ET.Element("handlerData")
+    remaining = clock_values(db, current, time.time_ns() // 1_000_000)
     player_rows = members(db, sid)
     member = next((p for p in player_rows if p["uid"] == user["uid"]), None)
     active = next((p["uid"] for p in player_rows if p["seat"] == current["active_seat"]), "")
@@ -231,11 +279,12 @@ def response(db, values, user, current):
     for p in player_rows:
         if not p["seat"]:
             continue
-        tag(players, "player", None, uid=p["uid"], name=p["name"], sex="-", score=1500,
+        tag(players, "player", None, uid=p["uid"], name=p["name"], sex="-", score=rating(db, p["uid"]),
             place=p["seat"], stat=p["stat"], lastRefresh=p["last_seen"],
             online=int(now() - p["last_seen"] < 90),
             active=int(current["status"] == "ACTIVE" and current["active_seat"] == p["seat"]),
-            finished=int(current["status"] == "FINISHED"))
+            finished=int(current["status"] == "FINISHED"),
+            **({"timerLeft": (remaining[p["seat"] - 1] + 999) // 1000} if remaining else {}))
     events = tag(root, "eventList", None)
     try:
         after = max(0, int(values.get("lasteid", "0")))
@@ -245,6 +294,13 @@ def response(db, values, user, current):
         tag(events, "event", None, eid=e["eid"], stamp=e["stamp"], uid=e["uid"], type=e["type"], data=e["data"])
     data = tag(root, "gameData", None)
     tag(data, "board", current["board"])
+    if current["status"] == "FINISHED":
+        ending = db.execute("SELECT data FROM events WHERE sid=? AND type='ENDGAME' ORDER BY eid DESC LIMIT 1", (sid,)).fetchone()
+        if ending:
+            tag(data, "ending", ending[0])
+    if current["status"] == "FINISHED" or values.get("cmd", "").upper() in ("UNDO", "REFRESH"):
+        moves = db.execute("SELECT coordinate FROM moves WHERE sid=? ORDER BY move_index", (sid,))
+        tag(data, "moves", ",".join(row[0] for row in moves))
     options = tag(root, "gameOptions", None)
     for key, value in json.loads(current["options"]).items():
         tag(options, "hidden" if key == "private" else key, value)
@@ -269,6 +325,12 @@ def command(db, values):
         member = db.execute("SELECT * FROM members WHERE sid=? AND uid=?", (sid, uid)).fetchone()
     db.execute("UPDATE members SET last_seen=? WHERE sid=? AND uid=?", (now(), sid, uid))
     seat = member["seat"]
+    stamp = time.time_ns() // 1_000_000
+    remaining = clock_values(db, current, stamp)
+    if remaining and current["status"] == "ACTIVE" and remaining[current["active_seat"] - 1] == 0:
+        save_clock(db, sid, remaining, stamp)
+        finish(db, current, 3 - current["active_seat"], "LOST", "0", "TIMEOUT")
+        return response(db, values, user, game(db, sid))
     if cmd == "PLACE":
         if current["status"] != "INIT":
             raise ValueError("Seats cannot change after the game starts.")
@@ -284,8 +346,12 @@ def command(db, values):
         if not 3 <= size <= 19:
             raise ValueError("Board size must be from 3 to 19.")
         options = json.loads(current["options"])
-        options.update({"boardSize": size, "timerTotal": max(0, int(values.get("timerTotal", 0))),
-                        "timerInc": max(0, int(values.get("timerInc", 0))),
+        total = int(values.get("timerTotal", 0))
+        increment = int(values.get("timerInc", 0))
+        if not (0 <= total <= 86400 and 0 <= increment <= 3600):
+            raise ValueError("Invalid game clock.")
+        options.update({"boardSize": size, "timerTotal": total,
+                        "timerInc": increment,
                         "scored": "1" if values.get("scored") == "1" else "0",
                         "private": "1" if values.get("private") == "1" else "0"})
         update_game(db, sid, board_size=size, board="0" * (size * size), options=json.dumps(options))
@@ -297,6 +363,9 @@ def command(db, values):
         emit(db, sid, uid, "START")
         ready = db.execute("SELECT COUNT(*) FROM members WHERE sid=? AND seat IN (1,2) AND stat='OFFERSTART'", (sid,)).fetchone()[0]
         if ready == 2:
+            budget = int(json.loads(current["options"])["timerTotal"]) * 1000
+            if budget:
+                save_clock(db, sid, [budget, budget], stamp)
             update_game(db, sid, status="ACTIVE", active_seat=1)
             db.execute("UPDATE members SET stat='PLAYING' WHERE sid=? AND seat IN (1,2)", (sid,))
             emit(db, sid, "0", "ACTIVE")
@@ -329,17 +398,21 @@ def command(db, values):
             db.execute("INSERT INTO moves(sid,move_index,uid,seat,coordinate,board_before) VALUES(?,?,?,?,?,?)",
                        (sid, count, uid, seat, move, board))
             update_game(db, sid, board=updated, active_seat=3 - seat)
-            if board_won(updated, size, seat):
-                update_game(db, sid, status="FINISHED", active_seat=0)
-                db.execute("UPDATE members SET stat=CASE WHEN seat=? THEN 'WIN' ELSE 'LOST' END WHERE sid=? AND seat IN (1,2)", (seat, sid))
-                emit(db, sid, uid, "ENDGAME", str(seat))
+        if remaining:
+            db.execute("INSERT INTO move_clocks VALUES(?,?,?,?)", (sid, count, *remaining))
+            remaining[seat - 1] += int(json.loads(current["options"])["timerInc"]) * 1000
+            save_clock(db, sid, remaining, stamp)
         emit(db, sid, uid, "MOVE", move)
+        if move != "SWAP" and board_won(updated, size, seat):
+            finish(db, current, seat, "LOST", uid, str(seat))
     elif cmd == "MSG":
         message = values.get("message", "").strip()
         if not message or len(message) > 1000:
             raise ValueError("Message must be from 1 to 1000 characters.")
         emit(db, sid, uid, "MSG", message)
     elif cmd == "UNDO":
+        if current["status"] != "ACTIVE" or seat not in (1, 2):
+            raise ValueError("Only players in an active game can undo.")
         kind = values.get("type", "")
         if kind == "ASK":
             last = db.execute("SELECT MAX(move_index) FROM moves WHERE sid=?", (sid,)).fetchone()[0]
@@ -355,6 +428,9 @@ def command(db, values):
             move = db.execute("SELECT * FROM moves WHERE sid=? AND move_index=?", (sid, target)).fetchone()
             if not move:
                 raise ValueError("Undo target was not found.")
+            clock = db.execute("SELECT first_ms,second_ms FROM move_clocks WHERE sid=? AND move_index=?", (sid, target)).fetchone()
+            if clock:
+                save_clock(db, sid, clock, stamp)
             db.execute("DELETE FROM moves WHERE sid=? AND move_index>=?", (sid, target))
             update_game(db, sid, board=move["board_before"], active_seat=move["seat"], pending_undo=None, pending_undo_by=None)
             emit(db, sid, uid, "UNDODONE", target)
@@ -374,14 +450,18 @@ def command(db, values):
             if not other or now() - other[0] < 120:
                 raise ValueError("The opponent has not timed out.")
         winner = 3 - seat if kind == "GIVEUP" else seat
-        db.execute("UPDATE members SET stat=CASE WHEN seat=? THEN 'WIN' ELSE 'QUIT' END WHERE sid=? AND seat IN (1,2)", (winner, sid))
-        update_game(db, sid, status="FINISHED", active_seat=0)
-        emit(db, sid, uid, "ENDGAME", kind)
+        if remaining:
+            save_clock(db, sid, remaining, stamp)
+        finish(db, current, winner, "QUIT", uid, kind)
     elif cmd == "LEAVE":
-        db.execute("DELETE FROM members WHERE sid=? AND uid=?", (sid, uid))
-        emit(db, sid, uid, "LEAVE", user["name"])
-        if current["status"] == "ACTIVE" or uid == current["owner"]:
+        if current["status"] == "ACTIVE" and seat in (1, 2):
+            if remaining:
+                save_clock(db, sid, remaining, stamp)
+            finish(db, current, 3 - seat, "QUIT", uid, "GIVEUP")
+        elif current["status"] == "INIT" and uid == current["owner"]:
             update_game(db, sid, status="FINISHED", active_seat=0)
+        db.execute("DELETE FROM members WHERE sid=? AND uid=?", (sid, uid))
+        emit(db, sid, uid, "LEAVE" if seat else "WATCHERLEFT", user["name"])
     elif cmd == "RESTART":
         if current["status"] != "FINISHED" or seat not in (1, 2):
             raise ValueError("A rematch can only follow a finished game.")
@@ -398,6 +478,15 @@ def command(db, values):
     elif cmd not in ("", "JOIN", "REFRESH"):
         raise ValueError("Unknown game command.")
     return response(db, values, user, game(db, sid))
+
+
+# Polling clients refresh at least every 15 seconds while waiting for a game.
+OPEN_ROOMS = """
+    SELECT g.* FROM games g JOIN members host ON host.sid=g.sid AND host.uid=g.owner
+    WHERE g.status='INIT' AND json_extract(g.options,'$.private')='0'
+      AND host.seat IN (1,2) AND host.last_seen>=?
+      AND NOT EXISTS (SELECT 1 FROM members m WHERE m.sid=g.sid AND m.seat IN (1,2) AND m.uid<>host.uid)
+"""
 
 
 def dispatch(db, path, values):
@@ -437,6 +526,10 @@ def dispatch(db, path, values):
         for key, value in (("curtime", now()), ("name", user["name"]), ("email", user["email"] or ""),
                            ("registrationTime", user["registered"]), ("lastAliveTime", now()), ("idleTimeSec", 0)):
             tag(profile, key, value)
+        totals = dict(db.execute("SELECT outcome,COUNT(*) FROM results WHERE uid=? GROUP BY outcome", (user["uid"],)))
+        stats = tag(profile, "gameStat", None)
+        tag(stats, "game", None, gid="12", score=rating(db, user["uid"]), numGames=sum(totals.values()),
+            numWin=totals.get("WIN", 0), numLoss=totals.get("LOST", 0), numQuit=totals.get("QUIT", 0), numDraw=0)
         return xml(root)
     if path == "/api_user_edit.php":
         user = auth(db, values)
@@ -455,9 +548,8 @@ def dispatch(db, path, values):
         user = auth(db, values)
         existing = None
         if path == "/api_board_random.php":
-            existing = db.execute("SELECT g.sid FROM games g WHERE g.status='INIT' AND json_extract(g.options,'$.private')='0' "
-                                  "AND g.owner<>? AND (SELECT COUNT(*) FROM members m WHERE m.sid=g.sid AND m.seat IN (1,2))=1 "
-                                  "ORDER BY g.created LIMIT 1", (user["uid"],)).fetchone()
+            existing = db.execute(OPEN_ROOMS + " ORDER BY (g.owner=?) DESC, g.created LIMIT 1",
+                                  (now() - 120, user["uid"])).fetchone()
         sid = existing["sid"] if existing else secrets.token_hex(10)
         if not existing:
             options = {"private": "1" if values.get("private") == "1" else "0", "scored": "0", "boardSize": 11,
@@ -467,12 +559,17 @@ def dispatch(db, path, values):
         seat = int(values.get("place", "1"))
         if seat not in (1, 2):
             raise ValueError("Invalid player seat.")
-        if existing:
-            occupied = {p["seat"] for p in members(db, sid)}
-            seat = 2 if 1 in occupied else 1
-        db.execute("INSERT INTO members(sid,uid,seat,last_seen) VALUES(?,?,?,?)", (sid, user["uid"], seat, now()))
-        emit(db, sid, user["uid"], "JOIN", user["name"])
-        emit(db, sid, user["uid"], "PLACE", seat)
+        if existing and existing["owner"] == user["uid"]:
+            db.execute("UPDATE members SET last_seen=? WHERE sid=? AND uid=?", (now(), sid, user["uid"]))
+        else:
+            if existing:
+                occupied = {p["seat"] for p in members(db, sid)}
+                seat = 2 if 1 in occupied else 1
+            db.execute("INSERT INTO members(sid,uid,seat,last_seen) VALUES(?,?,?,?) "
+                       "ON CONFLICT(sid,uid) DO UPDATE SET seat=excluded.seat,last_seen=excluded.last_seen",
+                       (sid, user["uid"], seat, now()))
+            emit(db, sid, user["uid"], "JOIN", user["name"])
+            emit(db, sid, user["uid"], "PLACE", seat)
         root = ET.Element("response")
         tag(root, "sid", sid)
         tag(root, "server", SERVER)
@@ -481,10 +578,8 @@ def dispatch(db, path, values):
         auth(db, values)
         root = ET.Element("response")
         listing = tag(root, "sessionList", None)
-        for row in db.execute("SELECT * FROM games WHERE status='INIT' AND json_extract(options,'$.private')='0' ORDER BY created DESC LIMIT 100"):
+        for row in db.execute(OPEN_ROOMS + " ORDER BY g.created DESC LIMIT 100", (now() - 120,)):
             players = members(db, row["sid"])
-            if sum(1 for p in players if p["seat"] > 0) >= 2:
-                continue
             session = tag(listing, "session", None, sid=row["sid"], stat=row["status"], uid=row["owner"], serv=SERVER, priv="0")
             for p in players:
                 tag(session, "member", None, plc=p["seat"], uid=p["uid"], nam=p["name"], stat=p["stat"])

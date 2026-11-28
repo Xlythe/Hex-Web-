@@ -1,0 +1,9 @@
+services:
+  website:
+    image: nginxinc/nginx-unprivileged:1.31.3-alpine3.24
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8994:8080"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./site:/usr/share/nginx/html:ro

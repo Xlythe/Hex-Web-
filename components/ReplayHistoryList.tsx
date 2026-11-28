@@ -15,6 +15,7 @@ interface ReplayHistoryListProps {
   /** An array of `CompletedGameEntry` objects, representing games played and saved. */
   completedGames: CompletedGameEntry[];
   /** Callback function invoked when a user selects a game from the list to start its replay. */
+  onExport: (game: CompletedGameEntry) => void;
   onStartReplay: (game: CompletedGameEntry) => void;
   /**
    * A crucial callback function to determine the actual player profile (name, color)
@@ -38,7 +39,7 @@ interface ReplayHistoryListProps {
   ) => PlayerProfile;
 }
 
-const ReplayHistoryList: React.FC<ReplayHistoryListProps> = ({ completedGames, onStartReplay, getProfileControllingBoardColor }) => {
+const ReplayHistoryList: React.FC<ReplayHistoryListProps> = ({ completedGames, onExport, onStartReplay, getProfileControllingBoardColor }) => {
   return (
     <div className="mt-8 w-full max-w-2xl bg-theme-card-bg-light dark:bg-theme-card-bg-dark shadow-xl rounded-lg p-4">
       <h2 className="text-xl font-semibold mb-3 text-theme-text-primary dark:text-theme-icon-dark text-center">Game Replays</h2>
@@ -67,8 +68,8 @@ const ReplayHistoryList: React.FC<ReplayHistoryListProps> = ({ completedGames, o
 
 
           return (
+            <div key={game.id}>
             <div
-              key={game.id}
               className="p-3 border border-theme-divider-light dark:border-theme-divider-dark rounded-md hover:bg-theme-divider-light dark:hover:bg-theme-bg-dark cursor-pointer transition-colors"
               onClick={() => onStartReplay(game)}
               role="button" // Indicates the item is clickable like a button.
@@ -88,6 +89,8 @@ const ReplayHistoryList: React.FC<ReplayHistoryListProps> = ({ completedGames, o
               <div className="text-xs text-theme-text-subtle mt-1">
                 Duration: {Math.floor(game.durationSeconds / 60)}m {game.durationSeconds % 60}s | Size: {game.settings.boardSize}x{game.settings.boardSize} | Swap: {game.settings.swapRuleEnabled ? 'On' : 'Off'}
               </div>
+            </div>
+            <button type="button" onClick={() => onExport(game)}>Export replay</button>
             </div>
           );
         })}

@@ -172,6 +172,7 @@ export interface HistoryEntry {
  * Used for storing and replaying past games.
  */
 export interface CompletedGameEntry {
+  sourceReplay?: string;
   /** @property id - A unique identifier for this completed game entry. */
   id: string;
   /** @property timestamp - The Unix timestamp (milliseconds since epoch) when the game concluded. */

@@ -1,13 +1,14 @@
 """Exercise the deployed mirror with two independently authenticated clients."""
 
 import hashlib
+import os
 import secrets
 import time
 import urllib.parse
 import urllib.request
 from xml.etree import ElementTree as ET
 
-BASE = "https://hex-api.xlythe.com"
+BASE = os.environ.get("HEX_TEST_SITE", "https://hex-api.xlythe.com").rstrip("/")
 PASSWORD = secrets.token_urlsafe(18)
 
 
@@ -71,6 +72,7 @@ def main():
         received = stream.readline().decode().strip()
         assert int(received.removeprefix("data: ")) > cursor
         assert time.monotonic() - started < 5, "Event stream was delayed"
+    handler(alice, sid, "END", type="GIVEUP")
     print("PASS: two accounts, lobby, seats, start, turn, move, chat, persisted board, live stream over HTTPS")
 
 

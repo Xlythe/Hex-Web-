@@ -1,3 +1,4 @@
+import { readReplay } from '../replayFile';
 
 import React, { createContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import {
@@ -191,7 +192,8 @@ export const GameSessionProvider: React.FC<GameSessionProviderProps> = ({ childr
       const thirtyDaysAgoTimestamp = Date.now() - thirtyDaysInMillis;
       // Filter games to keep only those from the last 30 days and sort them by most recent first.
       return games
-        .filter(game => game.timestamp >= thirtyDaysAgoTimestamp)
+        .filter(game => game.sourceReplay || game.timestamp >= thirtyDaysAgoTimestamp)
+        .map(game => game.sourceReplay ? { ...readReplay(game.sourceReplay), id: game.id } : game)
         .sort((a, b) => b.timestamp - a.timestamp);
     } catch (e) {
       console.error("Failed to parse completed games from localStorage:", e);
@@ -202,7 +204,7 @@ export const GameSessionProvider: React.FC<GameSessionProviderProps> = ({ childr
   // Effect to save the `completedGames` list to localStorage whenever it changes.
   // Limits stored games to the latest 20 to prevent localStorage bloat.
   useEffect(() => {
-    safeStorageSet('hexCompletedGames', JSON.stringify(completedGames.slice(0, 20)));
+    safeStorageSet('hexCompletedGames', JSON.stringify(completedGames.slice(0, 20).map(game => game.sourceReplay ? { id: game.id, sourceReplay: game.sourceReplay } : game)));
   }, [completedGames]);
 
   // Effect to initialize or re-initialize GameController and ReplayService

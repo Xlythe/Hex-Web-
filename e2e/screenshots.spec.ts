@@ -76,7 +76,7 @@ const createAccount = async (page: Page) => {
   ).toBeVisible();
 };
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     localStorage.clear();
     sessionStorage.clear();
@@ -84,10 +84,19 @@ test.beforeEach(async ({ page }) => {
     Math.random = () => 0.25;
   });
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Hex' })).toBeVisible();
+  if (testInfo.project.name === 'phone-landscape') {
+    if (testInfo.title.includes('wheel') || testInfo.title.includes('landscape main menu')) return;
+    await page.getByRole('button', { name: 'Play', exact: true }).click();
+  }
+  await expect(page.getByRole('heading', { name: 'Hex' })).toBeAttached();
 });
 
-test('local game page', async ({ page }) => {
+test('local game page', async ({ page }, testInfo) => {
+  if (testInfo.project.name === 'phone-landscape') {
+    for (const name of ['Exit', 'Restart current game', 'Undo last move']) {
+      await expect(page.getByRole('button', { name, exact: true })).toBeInViewport({ ratio: 1 });
+    }
+  }
   await screenshot(page, 'local-game');
 });
 
@@ -106,15 +115,106 @@ test('wheel follows a swipe and its labels rotate with it', async ({ page }) => 
   const centerX = bounds!.x + bounds!.width / 2;
   const centerY = bounds!.y + bounds!.height / 2;
   const radius = bounds!.width * .39;
-  const before = await wheel.evaluate(element => getComputedStyle(element).transform);
-  await page.mouse.move(centerX + radius, centerY);
+  const art = wheel.locator('svg');
+  const before = await art.evaluate(element => getComputedStyle(element).transform);
+  await page.mouse.move(centerX - radius, centerY);
   await page.mouse.down();
-  await page.mouse.move(centerX, centerY + radius, { steps: 8 });
+  await page.mouse.move(centerX, centerY - radius, { steps: 8 });
   await page.mouse.up();
-  await expect.poll(() => wheel.evaluate(element => getComputedStyle(element).transform)).not.toBe(before);
-  await expect(page.locator('.hex-wheel-replay')).toHaveCSS('transform', 'none');
+  await expect.poll(() => art.evaluate(element => getComputedStyle(element).transform)).not.toBe(before);
+  await expect(page.locator('.hex-wheel-replay')).toHaveAttribute('transform', 'rotate(180)');
   await page.locator('.hex-wheel-help').click();
   await expect(page.getByRole('heading', { name: 'Game Rules & Help' })).toBeVisible();
+});
+
+test('wheel tolerates finger jitter and shows feedback on the pressed sector', async ({ page }) => {
+  const sector = page.locator('.hex-wheel-help');
+  const icon = sector.locator('image');
+  const bounds = (await icon.boundingBox())!;
+  const x = bounds.x + bounds.width / 2, y = bounds.y + bounds.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 4, y - 3);
+  await expect(sector.locator('.wheel-wedge')).toHaveCSS('fill', 'rgb(219, 222, 221)');
+  await expect(page.locator('.hex-wheel-art')).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
+  await screenshot(page, 'pressed-wheel');
+  await page.mouse.up();
+  await expect(page.getByRole('heading', { name: 'Game Rules & Help' })).toBeVisible();
+});
+
+test('touchscreen wheel opens a section after a small finger movement', async ({ page, context, isMobile }) => {
+  test.skip(!isMobile);
+  const icon = page.locator('.hex-wheel-help image');
+  await icon.scrollIntoViewIfNeeded();
+  const box = (await icon.boundingBox())!;
+  const x = box.x + box.width / 2, y = box.y + box.height / 2;
+  const input = await context.newCDPSession(page);
+  await input.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+  await input.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x + 4, y: y + 2 }] });
+  await input.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await expect(page.getByRole('heading', { name: 'Game Rules & Help' })).toBeVisible();
+});
+
+test('wheel crossing the hub has no half-turn or accidental click', async ({ page }) => {
+  const wheel = page.locator('.hex-wheel');
+  const box = (await wheel.boundingBox())!;
+  const x = box.x + box.width / 2, y = box.y + box.height / 2, radius = box.width * .32;
+  await page.mouse.move(x - radius, y);
+  await page.mouse.down();
+  await page.mouse.move(x + radius, y);
+  await page.mouse.up();
+  await expect(wheel.locator('svg')).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('wheel flick carries farther than a paused drag and snaps to a sector', async ({ page }) => {
+  const wheel = page.locator('.hex-wheel');
+  const box = (await wheel.boundingBox())!;
+  const x = box.x + box.width / 2, y = box.y + box.height / 2, r = box.width * .3;
+  const angle = () => wheel.locator('svg').evaluate(el => Number(el.style.transform.match(/rotate\(([-.\d]+)deg\)/)?.[1]));
+  for (const pause of [true, false]) {
+    const before = await angle();
+    await page.mouse.move(x - r, y);
+    await page.mouse.down();
+    await page.mouse.move(x, y - r, { steps: 8 });
+    if (pause) await page.waitForTimeout(120);
+    await page.mouse.up();
+    const destination = await angle();
+    expect(destination % 60).toBe(0);
+    if (pause) expect(Math.abs(destination - before - 90)).toBeLessThanOrEqual(30.01);
+    else expect(destination - before).toBeGreaterThan(120);
+    await expect.poll(() => wheel.locator('svg').evaluate(el => el.getAnimations().length)).toBe(0);
+  }
+});
+
+test('board actions undo, confirm restart and resume after exit', async ({ page }) => {
+  const cell = page.getByRole('button', { name: /^Cell R1C1 / });
+  const undo = page.getByRole('button', { name: 'Undo last move' });
+  const restart = page.getByRole('button', { name: 'Restart current game' });
+  const exit = page.getByRole('button', { name: 'Exit', exact: true });
+  await cell.click();
+  await exit.click();
+  await expect(cell).toBeHidden();
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await expect(cell).toHaveAccessibleName(/Piece/);
+  await undo.click();
+  await expect(cell).toHaveAccessibleName(/Empty/);
+  await cell.click();
+  await restart.click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Reset Game' }).click();
+  await expect(cell).toHaveAccessibleName(/Empty/);
+});
+
+test('fullscreen stays in the top right corner in both modes', async ({ page }) => {
+  for (const name of ['Enter Fullscreen', 'Exit Fullscreen']) {
+    const toggle = page.getByRole('button', { name });
+    const bounds = (await toggle.boundingBox())!;
+    const card = (await page.locator('.hex-game-card').boundingBox())!;
+    expect(bounds.y - card.y).toBeLessThanOrEqual(12);
+    expect(card.x + card.width - bounds.x - bounds.width).toBeLessThanOrEqual(12);
+    await toggle.click();
+  }
+  await expect(page.getByRole('button', { name: 'Enter Fullscreen' })).toBeVisible();
 });
 
 test('help page', async ({ page }) => {
@@ -134,7 +234,7 @@ test('settings page', async ({ page }) => {
 
 test('new-game confirmation page', async ({ page }) => {
   await page.getByRole('button', { name: 'Cell R1C1 Empty', exact: true }).click();
-  await page.getByRole('button', { name: 'Reset current game' }).click();
+  await page.getByRole('button', { name: 'Restart current game' }).click();
   await expect(page.getByRole('heading', { name: 'Reset Game?' })).toBeVisible();
   await screenshot(page, 'new-game-confirmation');
 });
@@ -199,4 +299,13 @@ test('online game and chat pages', async ({ page }) => {
   await page.getByRole('button', { name: 'Open Chat' }).click();
   await expect(page.getByRole('heading', { name: 'Game Chat' })).toBeVisible();
   await screenshot(page, 'game-chat');
+});
+
+test('landscape main menu matches the Android composition', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'phone-landscape');
+  await screenshot(page, 'main-menu');
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Cell R1C1 Empty' })).toBeVisible();
+  await page.getByRole('button', { name: 'Exit', exact: true }).click();
+  await expect(page.locator('.hex-wheel')).toBeVisible();
 });

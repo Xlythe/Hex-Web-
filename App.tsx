@@ -1,3 +1,4 @@
+import { MAX_REPLAY_BYTES, readReplay, writeReplay } from './replayFile';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { HexWheel } from './components/HexWheel';
@@ -28,9 +29,13 @@ import OnlineRematchOfferModal from './components/OnlineRematchOfferModal';
 
 // Icon Imports
 import { UndoIcon } from './icons/UndoIcon';
-import { ResetIcon } from './icons/ResetIcon';
+import exitIcon from './icons/native/exit.png';
+import restartIcon from './icons/native/restart.png';
+import undoIcon from './icons/native/undo.png';
 import { ForfeitIcon } from './icons/ForfeitIcon';
 import { ClaimLossIcon } from './icons/ClaimLossIcon';
+import { ExpandIcon } from './icons/ExpandIcon';
+import { MinimizeIcon } from './icons/MinimizeIcon';
 import { HelpIcon } from './icons/HelpIcon';
 import { SettingsIcon } from './icons/SettingsIcon';
 import { ProfileIcon } from './icons/ProfileIcon';
@@ -228,6 +233,7 @@ interface GameControlButtonsProps {
   canResetGame: boolean;
   canRequestOnlineUndo: boolean;
   isOnlineActionLoading: boolean;
+  onExit: () => void;
   onLocalUndo: () => void;
   onRequestNewGameOrReset: () => void;
   onRequestOnlineUndo: () => void;
@@ -237,7 +243,7 @@ interface GameControlButtonsProps {
 }
 const GameControlButtons: React.FC<GameControlButtonsProps> = ({
   showMainControls, isOnlineGameActive, canUndoLocally, canResetGame, canRequestOnlineUndo,
-  isOnlineActionLoading, onLocalUndo, onRequestNewGameOrReset, onRequestOnlineUndo,
+  isOnlineActionLoading, onExit, onLocalUndo, onRequestNewGameOrReset, onRequestOnlineUndo,
   onForfeitGame, canClaimOpponentLoss, onClaimOpponentLoss
 }) => {
   if (!showMainControls) return null;
@@ -247,28 +253,29 @@ const GameControlButtons: React.FC<GameControlButtonsProps> = ({
   const disabledClass = "opacity-50 cursor-not-allowed";
 
   return (
-    <div className="absolute left-0 bottom-0 flex items-center space-x-2">
+    <div className="game-actions" role="group" aria-label="Game actions">
+      <button onClick={onExit} title="Return to menu"><img src={exitIcon} alt="" />Exit</button>
       {!isOnlineGameActive && ( // Local game controls
         <>
-          <button onClick={onLocalUndo} disabled={!canUndoLocally} className={`${buttonBaseClass} ${!canUndoLocally ? disabledClass : `${enabledClass} hover:text-yellow-600 dark:hover:text-theme-link-dark`}`} aria-label="Undo last move" title="Undo Move">
-            <UndoIcon className="w-6 h-6" />
+          <button onClick={onRequestNewGameOrReset} disabled={!canResetGame} aria-label="Restart current game">
+            <img src={restartIcon} alt="" />Restart
           </button>
-          <button onClick={onRequestNewGameOrReset} disabled={!canResetGame} className={`${buttonBaseClass} ${!canResetGame ? disabledClass : `${enabledClass} hover:text-red-600 dark:hover:text-red-500`}`} aria-label="Reset current game" title="Reset Game">
-            <ResetIcon className="w-6 h-6" />
+          <button onClick={onLocalUndo} disabled={!canUndoLocally} aria-label="Undo last move">
+            <img src={undoIcon} alt="" />Undo
           </button>
         </>
       )}
       {isOnlineGameActive && ( // Online game specific controls
         <>
           <button onClick={onRequestOnlineUndo} disabled={!canRequestOnlineUndo || isOnlineActionLoading} className={`${buttonBaseClass} ${!canRequestOnlineUndo || isOnlineActionLoading ? disabledClass : `${enabledClass} hover:text-yellow-600 dark:hover:text-theme-link-dark`}`} aria-label="Request Online Undo" title="Request Online Undo">
-            <UndoIcon className="w-6 h-6" />
+            <UndoIcon className="w-6 h-6" />Undo
           </button>
           <button onClick={onForfeitGame} disabled={isOnlineActionLoading} className={`${buttonBaseClass} ${isOnlineActionLoading ? disabledClass : `${enabledClass} hover:text-red-600 dark:hover:text-red-500`}`} aria-label="Forfeit Game" title="Forfeit Game">
-            <ForfeitIcon className="w-6 h-6" />
+            <ForfeitIcon className="w-6 h-6" />Forfeit
           </button>
           {canClaimOpponentLoss && (
             <button onClick={onClaimOpponentLoss} disabled={isOnlineActionLoading} className={`${buttonBaseClass} text-yellow-500 dark:text-yellow-400 ${isOnlineActionLoading ? disabledClass : `${enabledClass} hover:text-yellow-600 dark:hover:text-yellow-500`}`} aria-label="Claim Opponent's Loss" title="Claim Opponent's Loss (Timeout/Disconnect)">
-              <ClaimLossIcon className="w-6 h-6" />
+              <ClaimLossIcon className="w-6 h-6" />Claim loss
             </button>
           )}
         </>
@@ -348,7 +355,7 @@ const GameFooter: React.FC<GameFooterProps> = ({ currentDisplayState, gameOption
 const AppContent: React.FC = () => {
   const { loggedInUser, login, signup, logout, updateProfile: updateAuthProfile, isAuthLoading } = useAuth();
   const {
-    gameOptions, updateGameOptionsAndSave, gameController, currentDisplayState, completedGames,
+    gameOptions, updateGameOptionsAndSave, gameController, currentDisplayState, completedGames, setCompletedGames, setIsReplayListVisible,
     startGame, undoMove: localUndoMove, makeMove, startReplay, stopReplayAndNewGame, stopReplayAndShowList,
     getProfileForBoardSide, getCurrentTurnParticipantProfile, isReplayListVisible,
   } = useGameSession();
@@ -366,6 +373,43 @@ const AppContent: React.FC = () => {
   const { playClickSound, isSoundEffectsEnabled, playMessageChimeSound } = useSoundEffects({ isGloballyEnabled: isMusicEnabled });
 
   const prevTurnCountRef = useRef<number>(currentDisplayState.turnCount);
+  const [browseReplays, setBrowseReplays] = useState(false);
+  const [replayError, setReplayError] = useState('');
+  const [menuScreen, setScreen] = useState<'auto' | 'menu' | 'board'>('auto');
+
+  function showReplays() {
+    setScreen('board');
+    setBrowseReplays(true);
+    setIsReplayListVisible(true);
+    requestAnimationFrame(() => document.querySelector('.hex-replay-anchor')?.scrollIntoView());
+  }
+
+  async function importReplay(file?: File) {
+    if (!file) return;
+    try {
+      if (file.size > MAX_REPLAY_BYTES) throw new Error('Replay exceeds 1 MiB.');
+      const game = readReplay(await file.text());
+      setCompletedGames(games => [game, ...games].slice(0, 20));
+      setReplayError('');
+    } catch (error) {
+      setReplayError(error instanceof Error ? error.message : 'Unable to import replay.');
+    }
+  }
+
+  function exportReplay(game: CompletedGameEntry) {
+    try {
+      const url = URL.createObjectURL(new Blob([writeReplay(game)], { type: 'application/octet-stream' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'Hex-' + new Date(game.timestamp).toISOString().slice(0, 10) + '.rhex';
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setReplayError('');
+    } catch (error) {
+      setReplayError(error instanceof Error ? error.message : 'Unable to export replay.');
+    }
+  }
+
   const [isFullScreen, setIsFullScreen] = useState<boolean>(false);
   const gameCardRef = useRef<HTMLDivElement>(null);
 
@@ -742,7 +786,7 @@ const AppContent: React.FC = () => {
   const showPlayAgainButton = currentDisplayState.gamePhase === GamePhase.GAME_OVER && !currentDisplayState.isReplayActive && !isInWaitingRoom && rematchOfferState === RematchOfferState.IDLE;
   const showOfferRematchButton = canOfferRematch && currentDisplayState.gamePhase === GamePhase.GAME_OVER && !currentDisplayState.isReplayActive && !isInWaitingRoom && gameOptions.player2ControlType === PlayerControlType.ONLINE && !!onlineGameSessionId;
 
-  const showMainGameControls = currentDisplayState.gamePhase === GamePhase.PLAYING && !currentDisplayState.isReplayActive && !currentDisplayState.swappedCellCoordinate && !needsLoginPromptForOnlinePlay && !isInWaitingRoom;
+  const showMainGameControls = currentDisplayState.gamePhase === GamePhase.PLAYING && !currentDisplayState.isReplayActive && !needsLoginPromptForOnlinePlay && !isInWaitingRoom;
   const showFinishedReplayControls = currentDisplayState.gamePhase === GamePhase.GAME_OVER && !currentDisplayState.isReplayActive && currentDisplayState.gameBeingReplayedTimestamp !== null;
   const showChat = gameOptions.player2ControlType === PlayerControlType.ONLINE && !!onlineGameSessionId && !isInWaitingRoom && !isFullScreen && !currentDisplayState.isReplayActive;
   const showGameArea = !needsLoginPromptForOnlinePlay;
@@ -777,19 +821,20 @@ const AppContent: React.FC = () => {
     );
 
   return (
-    <div className={`hex-app-shell min-h-screen flex flex-col items-center justify-center bg-theme-bg-light dark:bg-theme-bg-dark transition-all duration-300 ${isFullScreen ? 'p-0' : 'p-2 sm:p-4'}`}>
+    <div className={`hex-app-shell ${menuScreen === 'board' ? 'show-board' : 'show-menu'} ${menuScreen === 'menu' ? 'menu-only' : ''} min-h-screen flex flex-col items-center justify-center bg-theme-bg-light dark:bg-theme-bg-dark transition-all duration-300 ${isFullScreen ? 'p-0' : 'p-2 sm:p-4'}`}>
       {!isFullScreen && <div className="hex-stage">
         <aside className="hex-home" aria-label="Hex menu">
+          <div className="native-player-name">{gameOptions.player1Profile.name}</div>
           <div className="hex-home-intro"><span className="hex-home-rule" />HEX<span className="hex-home-subtitle">THE CONNECTION GAME</span></div>
           <HexWheel actions={[
-            { key: 'settings', icon: '⚙', label: 'Settings', onClick: openSettingsModal },
-            { key: 'online', icon: '◎', label: 'Online', onClick: openSettingsModal },
-            { key: 'replay', icon: '↺', label: 'Replay', disabled: completedGames.length === 0, onClick: () => document.querySelector('.hex-replay-anchor')?.scrollIntoView({ behavior: 'smooth' }) },
-            { key: 'help', icon: '?', label: 'Help', onClick: () => setIsHelpModalOpen(true) },
-            { key: 'account', icon: '★', label: 'Account', onClick: () => loggedInUser ? setIsProfileModalOpen(true) : setIsLoginModalOpen(true) },
-            { key: 'play', icon: '▶', label: 'Play', onClick: handleRequestNewGameOrReset },
+            { key: 'settings', label: 'Settings', onClick: openSettingsModal },
+            { key: 'online', label: 'Online', onClick: openSettingsModal },
+            { key: 'replay', label: 'Replay', onClick: showReplays },
+            { key: 'help', label: 'Help', onClick: () => setIsHelpModalOpen(true) },
+            { key: 'account', label: 'Account', onClick: () => loggedInUser ? setIsProfileModalOpen(true) : setIsLoginModalOpen(true) },
+            { key: 'play', label: 'Play', onClick: () => { if (menuScreen === 'menu' || matchMedia('(orientation: landscape) and (max-height: 520px)').matches) setScreen('board'); else handleRequestNewGameOrReset(); } },
           ]} />
-          <p className="hex-home-caption">Connect your sides. Make every move count.</p>
+          <button className="native-account" onClick={() => loggedInUser ? setIsProfileModalOpen(true) : setIsLoginModalOpen(true)}>{loggedInUser ? 'Account' : 'Xlythe sign in'}</button>
           <span className="hex-home-rule hex-home-rule-bottom" />
         </aside>
       </div>}
@@ -800,8 +845,16 @@ const AppContent: React.FC = () => {
           : 'relative bg-theme-card-bg-light dark:bg-theme-card-bg-dark shadow-2xl rounded-xl p-4 sm:p-6 md:p-8 w-full max-w-2xl'
           } transition-all duration-300`}
       >
+        {showGameArea && !isInWaitingRoom && (
+          <button className="game-fullscreen" onClick={handleToggleFullScreen}
+            aria-label={isFullScreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+            title={isFullScreen ? 'Exit fullscreen' : 'Enter fullscreen'}>
+            {isFullScreen ? <MinimizeIcon className="w-5 h-5" /> : <ExpandIcon className="w-5 h-5" />}
+          </button>
+        )}
         {!isFullScreen && !currentDisplayState.isReplayActive && (
-          <div className="flex justify-between items-start mb-1">
+          <div className={`game-header flex justify-between items-start mb-1 ${showGameArea && !isInWaitingRoom ? 'pr-11' : ''}`}>
+            {!showMainGameControls && <button className="native-menu" onClick={() => setScreen('menu')}>Menu</button>}
             <h1 className="text-4xl sm:text-5xl font-bold text-theme-text-primary dark:text-theme-icon-dark">Hex</h1>
             <div className="flex items-center space-x-2 relative">
               <button onClick={() => setIsHelpModalOpen(true)} className="p-2 text-theme-icon-light dark:text-theme-icon-dark hover:text-theme-icon-light-hover dark:hover:text-theme-icon-dark-hover transition-colors duration-150 rounded-full hover:bg-theme-button-icon-bg-hover-light dark:hover:bg-theme-button-icon-bg-hover-dark focus:outline-none focus:ring-0" aria-label="Open Help"><HelpIcon className="w-6 h-6" /></button>
@@ -863,9 +916,8 @@ const AppContent: React.FC = () => {
             player2Color={activePlayer2BoardSideColor}
             currentPlayerActualColor={currentTurnActualColor}
             isFullScreen={isFullScreen}
-            onToggleFullScreen={handleToggleFullScreen}
-            isReplayActive={currentDisplayState.isReplayActive}
           />
+          <GameControlButtons showMainControls={showMainGameControls && !isFullScreen} isOnlineGameActive={isOnlineGameActive} canUndoLocally={gameController.canUndo()} canResetGame={gameController.canReset()} canRequestOnlineUndo={canRequestOnlineUndo} isOnlineActionLoading={isOnlineActionLoading} onExit={() => setScreen('menu')} onLocalUndo={localUndoMove} onRequestNewGameOrReset={handleRequestNewGameOrReset} onRequestOnlineUndo={requestOnlineUndo} onForfeitGame={handleForfeitGame} canClaimOpponentLoss={!!canClaimOpponentLoss} onClaimOpponentLoss={handleClaimOpponentLoss} />
           </div>
         )}
 
@@ -891,7 +943,7 @@ const AppContent: React.FC = () => {
                 <button onClick={handleInternalStopReplayAndNewGame} className="px-8 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all duration-150 ease-in-out focus:outline-none focus:ring-0">Stop Replay & New Game</button>
               )}
 
-              <GameControlButtons showMainControls={showMainGameControls} isOnlineGameActive={isOnlineGameActive} canUndoLocally={gameController.canUndo()} canResetGame={gameController.canReset()} canRequestOnlineUndo={canRequestOnlineUndo} isOnlineActionLoading={isOnlineActionLoading} onLocalUndo={localUndoMove} onRequestNewGameOrReset={handleRequestNewGameOrReset} onRequestOnlineUndo={requestOnlineUndo} onForfeitGame={handleForfeitGame} canClaimOpponentLoss={!!canClaimOpponentLoss} onClaimOpponentLoss={handleClaimOpponentLoss} />
+
               {showMainGameControls && (
                 <div className="absolute right-0 bottom-0 flex items-center">
                   <button onClick={toggleMusicPreference} className={`p-2 transition-colors duration-150 rounded-full hover:bg-theme-button-icon-bg-hover-light dark:hover:bg-theme-button-icon-bg-hover-dark focus:outline-none focus:ring-0 ${isMusicEnabled ? 'text-theme-icon-light dark:text-theme-icon-dark hover:text-theme-icon-light-hover dark:hover:text-theme-icon-dark-hover' : 'text-gray-400 dark:text-gray-500 hover:text-gray-500 dark:hover:text-gray-400'}`} aria-label={isMusicEnabled ? "Mute background music" : "Unmute background music"} title={isMusicEnabled ? "Mute Music" : "Unmute Music"} >
@@ -901,9 +953,14 @@ const AppContent: React.FC = () => {
               )}
             </div>
 
-            {completedGames.length > 0 && !currentDisplayState.isReplayActive && isReplayListVisible && (
+            {(browseReplays || completedGames.length > 0) && !currentDisplayState.isReplayActive && isReplayListVisible && (
               <div className="hex-replay-anchor">
+              <label>Import replay <input aria-label="Import replay" type="file" accept=".rhex,.json,application/json" onChange={e => {
+                void importReplay(e.target.files?.[0]); e.target.value = '';
+              }} /></label>
+              {replayError && <p role="alert">{replayError}</p>}
               <ReplayHistoryList
+                onExport={exportReplay}
                 completedGames={completedGames}
                 onStartReplay={handleStartReplayRequest}
                 getProfileControllingBoardColor={(side, p1ProfileForGame, p2ProfileForGame, wasSwapped, wasP1ProfileAssignedSideONEatStart) => {
