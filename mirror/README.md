@@ -53,3 +53,26 @@ increment to a legal move. Accepting an undo restores the clocks saved at the
 undone move. Either client can discover an expired clock by refreshing.
 Completed games record wins, losses and quits. Rated games adjust both
 players' ratings using Elo with a K-factor of 32 and a starting rating of 1500.
+
+## Player records
+
+The Account wedge shows Xlythe standings and personal achievements. Standings
+rank players with completed rated games by Elo. Equal ratings share a rank.
+The server awards progress from completed online games and can also display
+achievements earned in Android Hex, including offline computer games.
+
+In Hex on Android, sign into Play Games and choose **Achievements → Sync with
+Xlythe**. Confirm both account names. Sync uses a single-use Google authorization
+code. Google verifies the player identity and supplies their achievements. A
+Play Games player and Xlythe account can only be linked to each other. Verified browser games add steps to the existing Google count. Older games
+establish a minimum, and unlocks carry across both accounts. The server saves
+absolute targets before sending them, so retries cannot count a game twice.
+A subsequent sync on Android picks up newer progress. The server discards
+Google tokens after the request.
+
+Use a **Game server** credential for Play Games application 307536683764 in
+Play Console, linked to a **Web application** OAuth client in Cloud project
+api-project-307536683764. Supply HEX_GOOGLE_CLIENT_ID and HEX_GOOGLE_CLIENT_SECRET
+to the mirror through its deployment environment and recreate the service.
+Only the public client ID is returned to Android. The web client never receives
+Google credentials. [Google Play Games server access](https://developer.android.com/games/pgs/android/server-access)

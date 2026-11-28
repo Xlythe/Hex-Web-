@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 from urllib.parse import urlencode
 from xml.etree import ElementTree as ET
 
+import achievements
 import server
 
 
@@ -146,7 +147,7 @@ class MirrorTest(unittest.TestCase):
         self.handler(self.second, sid)
         self.handler(self.second, sid, "PLACE", place="2")
         with patch.object(server.time, "time_ns", return_value=100_000_000_000) as clock:
-            self.handler(self.first, sid, "START")
+            self.handler(self.first, sid, "START", client="web")
             self.handler(self.second, sid, "START")
             clock.return_value += 3_000_000_000
             state = self.handler(self.first, sid, "MOVE", move="B1")
@@ -167,6 +168,72 @@ class MirrorTest(unittest.TestCase):
             stats = self.call("/api_profile.php", **user).find("profile/gameStat/game")
             self.assertEqual(expected, tuple(stats.get(key) for key in ("numWin", "numLoss", "score")))
             self.assertEqual("1", stats.get("numGames"))
+
+    def test_rated_standings_exclude_unrated_and_share_tied_ranks(self):
+        with closing(server.connect()) as db, db:
+            for sid, scored, delta in (("rated", "1", 12), ("friendly", "0", 0)):
+                db.execute("INSERT INTO games(sid,owner,board,options,created) VALUES(?,?,?,?,0)",
+                           (sid, self.first["uid"], "0" * 9, '{"scored":"' + scored + '"}'))
+                for user in (self.first, self.second):
+                    db.execute("INSERT INTO results VALUES(?,?,?,?)", (sid, user["uid"], "WIN", delta))
+        rows = self.call("/api_standings.php").findall("player")
+        self.assertEqual([("Alice", "1", "1512", "1"), ("Bob", "1", "1512", "1")],
+                         [(r.get("name"), r.get("rank"), r.get("score"), r.get("played")) for r in rows])
+        self.assertIsNone(rows[0].get("email"))
+
+    def test_web_and_android_sessions_can_coexist_and_rotate_independently(self):
+        login = dict(login="Alice", password=hashlib.md5(b"long password").hexdigest(), md5="1")
+        browser = self.call("/api_login.php", **login, networkuid="browser").findtext("session_id")
+        phone = self.call("/api_login.php", **login, networkuid="phone").findtext("session_id")
+        self.call("/api_profile.php", uid=self.first["uid"], session_id=browser)
+        self.call("/api_login.php", **login, networkuid="phone")
+        self.call("/api_profile.php", uid=self.first["uid"], session_id=browser)
+        with self.assertRaises(ValueError):
+            self.call("/api_profile.php", uid=self.first["uid"], session_id=phone)
+
+    @patch.dict(os.environ, HEX_GOOGLE_CLIENT_ID="client", HEX_GOOGLE_CLIENT_SECRET="secret")
+    def test_verified_google_link_syncs_earned_progress_and_rejects_account_conflicts(self):
+        progress = {achievements.ACHIEVEMENTS["computer"][0]: {"achievementState": "UNLOCKED"},
+                    achievements.ACHIEVEMENTS["played1"][0]: {"currentSteps": 12}}
+        mutations = []
+        def google(url, *, token=None, form=None):
+            if url.endswith("/token"):
+                self.assertEqual("fresh-code", form["code"])
+                return {"access_token": "short-lived"}
+            self.assertEqual("short-lived", token)
+            if url.endswith("players/me"): return {"playerId": "player-one"}
+            if "players/me/achievements?" in url:
+                return {"items": [dict(id=k, **v) for k,v in progress.items()]}
+            ident, method = url.split("/")[-2:]
+            mutations.append(ident)
+            progress[ident] = ({"currentSteps": int(method.split("=")[-1])} if "setSteps" in method
+                               else {"achievementState": "UNLOCKED"})
+            return {}
+        with patch.object(achievements, "google_json", side_effect=google):
+            with closing(server.connect()) as db, db:
+                db.execute("INSERT INTO games(sid,owner,board,options,created) VALUES('played',?,'000', '{}',0)",
+                           (self.first["uid"],))
+                db.execute("INSERT INTO results VALUES('played',?,'WIN',0)", (self.first["uid"],))
+                db.execute("INSERT INTO members(sid,uid,seat,last_seen) VALUES('played',?,1,0)", (self.first["uid"],))
+                db.execute("INSERT INTO web_seats VALUES('played',?)", (self.first["uid"],))
+                for event, stamp in (("ACTIVE", 100), ("ENDGAME", 130)):
+                    db.execute("INSERT INTO events(sid,uid,type,stamp) VALUES('played',?,?,?)",
+                               (self.first["uid"], event, stamp))
+            self.call("/api_play_sync.php", **self.first, code="fresh-code")
+            initial = len(mutations)
+            self.assertGreater(initial, 0)
+            self.assertEqual(13, progress[achievements.ACHIEVEMENTS["played1"][0]]["currentSteps"])
+            self.call("/api_play_sync.php", **self.first, code="fresh-code")
+            self.assertEqual(initial, len(mutations))
+            result = self.call("/api_profile.php", **self.first).find("profile/achievements")
+            self.assertGreater(int(result.get("synced")), 0)
+            self.assertEqual("1", result.find("achievement[@name='Beat the computer']").get("unlocked"))
+            self.assertEqual("0", result.find("achievement[@name='Finish in 30 seconds']").get("unlocked"))
+            with self.assertRaisesRegex(ValueError, "already linked"):
+                self.call("/api_play_sync.php", **self.second, code="fresh-code")
+            with self.assertRaisesRegex(ValueError, "expired"):
+                self.call("/api_play_sync.php", uid=self.first["uid"], session_id="wrong", code="fresh-code")
+            self.assertEqual(initial, len(mutations))
 
     def test_full_board_has_one_winner_and_only_edge_adjacency_counts(self):
         for mask in range(512):

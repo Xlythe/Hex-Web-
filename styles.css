@@ -244,3 +244,17 @@
 .hex-game-card:fullscreen .hex-board-stage { flex: 1; min-height: 0; }
 .hex-game-card:fullscreen .hex-turn-banner { display: none; }
 .hex-game-card:fullscreen .hex-board-stage .hex-board { width: 100%; }
+
+.hex-records { margin: auto; width: min(28rem, 94vw); max-height: 85dvh; overflow: auto; border: 0; border-radius: .65rem; padding: 1.25rem; color: #202631; background: #fff; box-shadow: 0 12px 64px #0005; }
+.hex-records::backdrop { background: #11182799; }
+.hex-records header, .hex-records nav, .hex-records li { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.hex-records h2 { font-size: 1.45rem; font-weight: 700; }
+.hex-records button { padding: .4rem .65rem; border-radius: .25rem; }
+.hex-records nav { justify-content: start; margin: .8rem 0; border-bottom: 1px solid #ccc; }
+.hex-records nav [aria-pressed=true] { color: #164aa1; box-shadow: inset 0 -3px #386ec3; }
+.hex-records table { width: 100%; border-collapse: collapse; text-align: right; }
+.hex-records caption { text-align: left; margin-bottom: .5rem; }
+.hex-records td, .hex-records th, .hex-records li { padding: .45rem .25rem; border-bottom: 1px solid #ddd; }
+.hex-records tr > :nth-child(2) { text-align: left; }
+.hex-records footer { margin-top: 1rem; }
+.hex-records footer button { background: #e9edf4; }

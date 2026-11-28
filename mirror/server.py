@@ -4,6 +4,7 @@ Both clients speak the same POST/XML protocol. State changes are serialized by
 SQLite write transactions; the board and move log remain authoritative here.
 """
 
+import achievements
 import hashlib
 import ipaddress
 import json
@@ -121,6 +122,11 @@ def init_db():
             email TEXT UNIQUE COLLATE NOCASE, password_md5 TEXT NOT NULL,
             session_hash TEXT, registered INTEGER NOT NULL
           );
+          CREATE TABLE IF NOT EXISTS device_sessions (
+            uid TEXT NOT NULL REFERENCES users(uid), device TEXT NOT NULL, digest TEXT NOT NULL,
+            issued INTEGER NOT NULL, PRIMARY KEY(uid, device)
+          );
+          CREATE INDEX IF NOT EXISTS user_sessions ON device_sessions(uid, digest);
           CREATE TABLE IF NOT EXISTS games (
             sid TEXT PRIMARY KEY, owner TEXT NOT NULL REFERENCES users(uid),
             status TEXT NOT NULL DEFAULT 'INIT', active_seat INTEGER NOT NULL DEFAULT 0,
@@ -156,6 +162,7 @@ def init_db():
             board_before TEXT NOT NULL, PRIMARY KEY(sid,move_index)
           );
         """)
+        achievements.init(db)
         columns = {row[1] for row in db.execute("PRAGMA table_info(users)")}
         if "password_salt" not in columns:
             db.execute("ALTER TABLE users ADD COLUMN password_salt TEXT")
@@ -182,7 +189,10 @@ def auth(db, values):
     if not uid or not session:
         raise ValueError("Please log in again.")
     user = db.execute("SELECT * FROM users WHERE uid=?", (uid,)).fetchone()
-    if not user or user["session_hash"] != hashlib.sha256(session.encode()).hexdigest():
+    digest = hashlib.sha256(session.encode()).hexdigest()
+    if not user or (user["session_hash"] != digest and not db.execute(
+            "SELECT 1 FROM device_sessions WHERE uid=? AND digest=? AND issued>?",
+            (uid, digest, now() - 30 * 86400)).fetchone()):
         raise ValueError("Your session has expired. Please log in again.")
     return user
 
@@ -359,6 +369,8 @@ def command(db, values):
     elif cmd == "START":
         if current["status"] != "INIT" or seat not in (1, 2):
             raise ValueError("Take a seat before starting.")
+        if values.get("client") == "web":
+            db.execute("INSERT OR IGNORE INTO web_seats VALUES(?,?)", (sid, uid))
         db.execute("UPDATE members SET stat='OFFERSTART' WHERE sid=? AND uid=?", (sid, uid))
         emit(db, sid, uid, "START")
         ready = db.execute("SELECT COUNT(*) FROM members WHERE sid=? AND seat IN (1,2) AND stat='OFFERSTART'", (sid,)).fetchone()[0]
@@ -514,11 +526,32 @@ def dispatch(db, path, values):
             db.execute("UPDATE users SET password_md5='',password_salt=?,password_hash=? WHERE uid=?",
                        (salt, digest_hash, user["uid"]))
         session = secrets.token_urlsafe(32)
-        db.execute("UPDATE users SET session_hash=? WHERE uid=?", (hashlib.sha256(session.encode()).hexdigest(), user["uid"]))
+        device = values.get("networkuid", "")[:128]
+        db.execute("INSERT OR REPLACE INTO device_sessions VALUES(?,?,?,?)",
+                   (user["uid"], device, hashlib.sha256(session.encode()).hexdigest(), now()))
+        db.execute("""DELETE FROM device_sessions WHERE uid=? AND rowid NOT IN (
+                  SELECT rowid FROM device_sessions WHERE uid=? ORDER BY issued DESC,rowid DESC LIMIT 16)""",
+                   (user["uid"], user["uid"]))
+        # Retire the pre-migration session when its owner next authenticates.
+        db.execute("UPDATE users SET session_hash=NULL WHERE uid=?", (user["uid"],))
         root = ET.Element("response")
         for key, value in (("uid", user["uid"]), ("name", user["name"]), ("session_id", session)):
             tag(root, key, value)
         return xml(root)
+    if path == "/api_standings.php":
+        root = ET.Element("standings")
+        achievements.standings(db, root)
+        return xml(root)
+    if path == "/api_play_config.php":
+        root = ET.Element("response")
+        if os.environ.get("HEX_GOOGLE_CLIENT_SECRET"):
+            tag(root, "client_id", os.environ.get("HEX_GOOGLE_CLIENT_ID", ""))
+        return xml(root)
+    if path == "/api_play_sync.php":
+        user = auth(db, values)
+        db.commit()
+        achievements.sync(db, user["uid"], values.get("code"))
+        return xml(ET.Element("synced"))
     if path == "/api_profile.php":
         user = auth(db, values)
         root = ET.Element("response")
@@ -526,6 +559,7 @@ def dispatch(db, path, values):
         for key, value in (("curtime", now()), ("name", user["name"]), ("email", user["email"] or ""),
                            ("registrationTime", user["registered"]), ("lastAliveTime", now()), ("idleTimeSec", 0)):
             tag(profile, key, value)
+        achievements.profile(db, user["uid"], profile)
         totals = dict(db.execute("SELECT outcome,COUNT(*) FROM results WHERE uid=? GROUP BY outcome", (user["uid"],)))
         stats = tag(profile, "gameStat", None)
         tag(stats, "game", None, gid="12", score=rating(db, user["uid"]), numGames=sum(totals.values()),
@@ -538,6 +572,10 @@ def dispatch(db, path, values):
             raise ValueError("Invalid nickname.")
         password = values.get("password")
         if password:
+            db.execute("DELETE FROM device_sessions WHERE uid=? AND digest<>?",
+                       (user["uid"], hashlib.sha256(values["session_id"].encode()).hexdigest()))
+            db.execute("UPDATE users SET session_hash=NULL WHERE uid=? AND session_hash<>?",
+                       (user["uid"], hashlib.sha256(values["session_id"].encode()).hexdigest()))
             salt, digest_hash = password_record(hashlib.md5(password.encode()).hexdigest())
         else:
             salt, digest_hash = user["password_salt"], user["password_hash"]

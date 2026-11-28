@@ -68,6 +68,8 @@ export interface MockIgGameCenterApiOptions {
  * @description Provides a mock implementation of the IgGameCenterApi.
  */
 export class MockIgGameCenterApi {
+  async standings() { return []; }
+
   private users: Map<string, StoredMockUser> = new Map();
   private profiles: Map<string, IgUserProfileData> = new Map();
   private usernameToUid: Map<string, string> = new Map();

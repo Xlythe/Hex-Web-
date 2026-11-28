@@ -1,3 +1,4 @@
+import { PlayerRecords } from './components/PlayerRecords';
 import { MAX_REPLAY_BYTES, readReplay, writeReplay } from './replayFile';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -419,6 +420,7 @@ const AppContent: React.FC = () => {
   const [isConfirmationModalOpen, setIsConfirmationModalOpen] = useState<boolean>(false);
   const [isSignupModalOpen, setIsSignupModalOpen] = useState<boolean>(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
+  const [recordsOpen, setRecordsOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
   const [isCreateGameModalOpen, setIsCreateGameModalOpen] = useState<boolean>(false);
 
@@ -831,7 +833,7 @@ const AppContent: React.FC = () => {
             { key: 'online', label: 'Online', onClick: openSettingsModal },
             { key: 'replay', label: 'Replay', onClick: showReplays },
             { key: 'help', label: 'Help', onClick: () => setIsHelpModalOpen(true) },
-            { key: 'account', label: 'Account', onClick: () => loggedInUser ? setIsProfileModalOpen(true) : setIsLoginModalOpen(true) },
+            { key: 'account', label: 'Account', onClick: () => setRecordsOpen(true) },
             { key: 'play', label: 'Play', onClick: () => { if (menuScreen === 'menu' || matchMedia('(orientation: landscape) and (max-height: 520px)').matches) setScreen('board'); else handleRequestNewGameOrReset(); } },
           ]} />
           <button className="native-account" onClick={() => loggedInUser ? setIsProfileModalOpen(true) : setIsLoginModalOpen(true)}>{loggedInUser ? 'Account' : 'Xlythe sign in'}</button>
@@ -1072,6 +1074,8 @@ const AppContent: React.FC = () => {
           )}
           <SignupModal isOpen={isSignupModalOpen} onClose={() => setIsSignupModalOpen(false)} onSignupSuccess={handleSignupSuccess} />
           <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} onLoginSuccess={handleLoginSuccess} onSwitchToSignup={() => { setIsLoginModalOpen(false); setIsSignupModalOpen(true); }} />
+          {recordsOpen && <PlayerRecords user={loggedInUser} close={() => setRecordsOpen(false)}
+            account={() => { setRecordsOpen(false); if (loggedInUser) setIsProfileModalOpen(true); else setIsLoginModalOpen(true); }} />}
           {loggedInUser && (<ProfileModal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} loggedInUser={loggedInUser} onProfileUpdated={handleProfileUpdated} />)}
         </>
       )}

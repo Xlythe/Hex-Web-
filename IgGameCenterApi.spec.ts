@@ -14,6 +14,17 @@ describe('IgGameCenterApi transport and XML parsing', () => {
     localStorage.clear();
   });
 
+  it('reads tied standings and synced achievement progress', async () => {
+    const fetchImplementation = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(xmlResponse('<standings><player rank="1" name="Alice" score="1516" played="2" wins="2"/></standings>'))
+      .mockResolvedValueOnce(xmlResponse('<response><profile><achievements synced="100"><achievement name="Novice" steps="13" incremental="1" unlocked="0"/></achievements></profile></response>'));
+    const client = new IgGameCenterApi({ fetchImplementation });
+    expect(await client.standings()).toEqual([{ rank: 1, name: 'Alice', score: 1516, wins: 2, played: 2 }]);
+    expect(await client.getUserProfile({ uid: '1', session_id: 'session' })).toMatchObject({
+      playGamesSynced: 100, achievements: [{ name: 'Novice', steps: 13, incremental: true, unlocked: false }],
+    });
+  });
+
   it('subscribes to mirror events with authorization outside the URL', async () => {
     const fetchImplementation = vi.fn<typeof fetch>().mockResolvedValue(
       new Response('event: refresh\ndata: 5\n\n', {
